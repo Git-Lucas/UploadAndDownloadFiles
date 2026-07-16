@@ -1,3 +1,10 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="docs/PRD.md" />
+  </Folder>
+  <Project Path="UploadAndDownloadFiles.Client/UploadAndDownloadFiles.Client.csproj" />
+  <Project Path="UploadAndDownloadFiles.Shared/UploadAndDownloadFiles.Shared.csproj" />
+  <Project Path="UploadAndDownloadFiles.Testes.Integracao/UploadAndDownloadFiles.Testes.Integracao.csproj" />
+  <Project Path="UploadAndDownloadFiles.Testes.Unidade/UploadAndDownloadFiles.Testes.Unidade.csproj" />
   <Project Path="UploadAndDownloadFiles/UploadAndDownloadFiles.csproj" />
 </Solution>
