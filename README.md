@@ -8,8 +8,7 @@ grandes usando Amazon S3 como armazenamento e Amazon CloudFront (Signed URLs) pa
 - `UploadAndDownloadFiles.Shared/` — DTOs e enums compartilhados entre Client e Server
 - `UploadAndDownloadFiles.Testes.Unidade` / `UploadAndDownloadFiles.Testes.Integracao` — testes xUnit
 
-Mais contexto de arquitetura em `docs/PRD - Upload e Download de Arquivos com S3.md` e em
-`openspec/changes/upload-download-s3/design.md`.
+Mais contexto de arquitetura e requisitos em `docs/PRD - Upload e Download de Arquivos com S3.md`.
 
 ## Pré-requisitos
 
@@ -71,9 +70,8 @@ CloudFront__CaminhoChavePrivada=...
 
 ## Provisionamento na AWS
 
-A aplicação **não provisiona infraestrutura AWS via código** (ver Non-Goals em
-`openspec/changes/upload-download-s3/design.md`). Os passos abaixo devem ser feitos uma vez, via
-Console AWS, CLI ou Terraform, antes de rodar a aplicação contra uma conta real.
+A aplicação **não provisiona infraestrutura AWS via código**. Os passos abaixo devem ser feitos uma
+vez, via Console AWS, CLI ou Terraform, antes de rodar a aplicação contra uma conta real.
 
 ### 1. Criar o bucket S3
 
