@@ -1,0 +1,137 @@
+@page "/"
+@inject OrquestradorDeUpload Orquestrador
+@inject InteropDeUpload Interop
+@inject HttpClient Http
+@using UploadAndDownloadFiles.Client.Servicos
+@using UploadAndDownloadFiles.Shared
+
+<PageTitle>Upload e Download de Arquivos</PageTitle>
+
+<h1>Upload e Download de Arquivos</h1>
+
+<h2>Upload</h2>
+
+<p>
+    <input type="file" id="arquivo-input" />
+</p>
+
+<p>
+    <button @onclick="EnviarAsync" disabled="@_enviando">Enviar</button>
+    @if (_arquivoId is not null)
+    {
+        <button @onclick="TentarNovamenteAsync" disabled="@_enviando">Tentar novamente</button>
+    }
+</p>
+
+@if (_arquivoId is not null)
+{
+    <p>Id do arquivo: <code>@_arquivoId</code></p>
+}
+
+@if (_mensagens.Count > 0)
+{
+    <ul>
+        @foreach (var mensagem in _mensagens)
+        {
+            <li>@mensagem</li>
+        }
+    </ul>
+}
+
+<h2>Download</h2>
+
+<p>
+    <input type="text" @bind="_idParaDownload" placeholder="Id do arquivo" size="40" />
+    <button @onclick="BaixarAsync">Baixar</button>
+</p>
+
+@if (_erroDownload is not null)
+{
+    <p style="color:red">@_erroDownload</p>
+}
+
+@code {
+    private const string IdInputArquivo = "arquivo-input";
+
+    private bool _enviando;
+    private Guid? _arquivoId;
+    private ModoUpload _modo;
+    private string? _urlUpload;
+    private long? _tamanhoParte;
+    private readonly List<string> _mensagens = new();
+
+    private string? _idParaDownload;
+    private string? _erroDownload;
+
+    private async Task EnviarAsync()
+    {
+        _mensagens.Clear();
+        _enviando = true;
+        try
+        {
+            var registro = await Orquestrador.RegistrarAsync(IdInputArquivo);
+            _arquivoId = registro.Id;
+            _modo = registro.Modo;
+            _urlUpload = registro.UrlUpload;
+            _tamanhoParte = registro.TamanhoParte;
+            _mensagens.Add($"Arquivo registrado (modo: {_modo}).");
+
+            await Orquestrador.EnviarAsync(registro.Id, IdInputArquivo, _modo, _urlUpload, _tamanhoParte, Progredir);
+        }
+        catch (Exception ex)
+        {
+            _mensagens.Add($"Erro: {ex.Message}");
+        }
+        finally
+        {
+            _enviando = false;
+        }
+    }
+
+    private async Task TentarNovamenteAsync()
+    {
+        if (_arquivoId is null)
+            return;
+
+        _enviando = true;
+        try
+        {
+            await Orquestrador.EnviarAsync(_arquivoId.Value, IdInputArquivo, _modo, _urlUpload, _tamanhoParte, Progredir);
+        }
+        catch (Exception ex)
+        {
+            _mensagens.Add($"Erro: {ex.Message}");
+        }
+        finally
+        {
+            _enviando = false;
+        }
+    }
+
+    private void Progredir(string mensagem)
+    {
+        _mensagens.Add(mensagem);
+        StateHasChanged();
+    }
+
+    private async Task BaixarAsync()
+    {
+        _erroDownload = null;
+
+        if (string.IsNullOrWhiteSpace(_idParaDownload) || !Guid.TryParse(_idParaDownload, out var id))
+        {
+            _erroDownload = "Id inválido.";
+            return;
+        }
+
+        try
+        {
+            var resposta = await Http.GetFromJsonAsync<UploadAndDownloadFiles.Shared.Dtos.DownloadResponse>($"/api/arquivos/{id}/download");
+            await Interop.IniciarDownloadAsync(resposta!.Url);
+        }
+        catch (Exception ex)
+        {
+            _erroDownload = $"Erro: {ex.Message}";
+        }
+    }
+}
