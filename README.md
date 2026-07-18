@@ -75,7 +75,9 @@ vez, via Console AWS, CLI ou Terraform, antes de rodar a aplicação contra uma 
 
 ### 1. Criar o bucket S3
 
-1. Console AWS → **S3** → **Create bucket**.
+1. Console AWS → **S3** → **Create bucket** (bucket padrão/general-purpose — **não** um directory
+   bucket do S3 Express One Zone, que não suporta lifecycle rules nem origem via OAC do CloudFront,
+   usados nos passos 3 e 4).
 2. Nome único (esse é o valor de `ArmazenamentoS3:NomeBucket`), região à sua escolha.
 3. **Block all public access**: mantenha habilitado (padrão) — o bucket é privado; o acesso de
    leitura só acontece via CloudFront (OAC) e o de escrita via presigned URLs assinadas pelo backend.
@@ -98,6 +100,9 @@ Bucket → **Permissions** → **Cross-origin resource sharing (CORS)**:
   }
 ]
 ```
+
+Em desenvolvimento local, `AllowedOrigins` deve ser o valor de `applicationUrl` configurado no
+`launchSettings.json` do projeto Server (startup project).
 
 Detalhes em `docs/infraestrutura-cloudfront-e-cors.md`.
 
