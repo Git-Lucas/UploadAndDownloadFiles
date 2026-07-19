@@ -24,7 +24,7 @@ Arquivos de até vários TB não podem trafegar pelo backend (custo, memória, g
 
 **C1 — Registro do arquivo.** Ao receber a primeira requisição, o sistema cria um registro com status `Pendente`, gerando internamente a chave (key) do objeto — nunca aceita a chave vinda do cliente.
 
-**C2 — Upload pequeno (< 100 MB).** O sistema fornece uma URL pré-assinada de PUT único para envio direto ao S3.
+**C2 — Upload pequeno (< 100 MB).** O sistema fornece uma URL pré-assinada de PUT único para envio direto ao S3. Após o envio, o cliente confirma a conclusão; o sistema verifica a existência do objeto (`HeadObject`) e atualiza o status para `Completo`.
 
 **C3 — Upload grande (≥ 100 MB).** O sistema inicia um multipart upload, persiste o `uploadId`, e fornece URLs pré-assinadas **por parte, sob demanda**, com tamanho de parte adaptativo que respeita o limite de 10.000 partes até 5 TB.
 
@@ -45,7 +45,7 @@ Arquivos de até vários TB não podem trafegar pelo backend (custo, memória, g
 ## 6. Critérios de aceite
 
 - **C1:** Requisição inicial cria registro `Pendente` com key gerada pelo servidor; requisição que tente informar a key é ignorada/rejeitada.
-- **C2:** Arquivo < 100 MB é enviado com uma única URL de PUT e aparece no S3.
+- **C2:** Arquivo < 100 MB é enviado com uma única URL de PUT, aparece no S3 e, após a confirmação do cliente, o registro passa para o status `Completo`.
 - **C3:** Arquivo ≥ 100 MB gera `uploadId` persistido; o número de partes nunca excede 10.000 para arquivos de até 5 TB.
 - **C4:** Após interromper e retomar, a soma das partes no S3 corresponde ao arquivo completo, sem reenvio das partes já aceitas.
 - **C5:** Uma parte cuja URL expirou pode ser enviada com sucesso após o cliente solicitar nova URL.
