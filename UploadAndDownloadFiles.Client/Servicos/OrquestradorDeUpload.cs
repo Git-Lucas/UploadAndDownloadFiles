@@ -56,7 +56,12 @@ public sealed class OrquestradorDeUpload
         {
             aoProgredir?.Invoke("Enviando arquivo...");
             await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!);
-            aoProgredir?.Invoke("Envio concluído. A confirmação do status ocorre pela reconciliação periódica.");
+
+            aoProgredir?.Invoke("Confirmando upload...");
+            var respostaConfirmar = await _http.PostAsync($"/api/arquivos/{id}/confirmar", content: null, cancellationToken);
+            respostaConfirmar.EnsureSuccessStatusCode();
+
+            aoProgredir?.Invoke("Upload concluído.");
             return;
         }
 

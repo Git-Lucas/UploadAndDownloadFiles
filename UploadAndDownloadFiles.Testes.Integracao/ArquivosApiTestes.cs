@@ -92,6 +92,46 @@ public class ArquivosApiTestes : IDisposable
     }
 
     [Fact]
+    public async Task ConfirmarPutUnico_ComObjetoNoS3_MarcaCompletoELiberaDownload()
+    {
+        _factory.MockArmazenamento
+            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 10 * Mb, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("https://s3.exemplo/url-unica");
+
+        var respostaRegistro = await _client.PostAsJsonAsync("/api/arquivos", new RegistrarArquivoRequest("foto.png", 10 * Mb));
+        var registro = await respostaRegistro.Content.ReadFromJsonAsync<RegistrarArquivoResponse>();
+
+        _factory.MockArmazenamento
+            .Setup(a => a.ObterTamanhoObjetoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10 * Mb);
+
+        var respostaConfirmar = await _client.PostAsync($"/api/arquivos/{registro!.Id}/confirmar", content: null);
+        Assert.Equal(HttpStatusCode.NoContent, respostaConfirmar.StatusCode);
+
+        _factory.MockAssinadorCdn
+            .Setup(a => a.GerarUrlAssinada(It.IsAny<string>()))
+            .Returns("https://cdn.exemplo/download-assinado");
+
+        var respostaDownload = await _client.GetAsync($"/api/arquivos/{registro.Id}/download");
+        respostaDownload.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task ConfirmarPutUnico_ComObjetoAindaAusenteNoS3_Retorna409()
+    {
+        _factory.MockArmazenamento
+            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 10 * Mb, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("https://s3.exemplo/url-unica");
+
+        var respostaRegistro = await _client.PostAsJsonAsync("/api/arquivos", new RegistrarArquivoRequest("foto.png", 10 * Mb));
+        var registro = await respostaRegistro.Content.ReadFromJsonAsync<RegistrarArquivoResponse>();
+
+        var respostaConfirmar = await _client.PostAsync($"/api/arquivos/{registro!.Id}/confirmar", content: null);
+
+        Assert.Equal(HttpStatusCode.Conflict, respostaConfirmar.StatusCode);
+    }
+
+    [Fact]
     public async Task Download_DeArquivoInexistente_Retorna404()
     {
         var resposta = await _client.GetAsync($"/api/arquivos/{Guid.NewGuid()}/download");
