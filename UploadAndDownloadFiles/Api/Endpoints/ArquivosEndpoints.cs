@@ -15,6 +15,7 @@ public static class ArquivosEndpoints
         grupo.MapGet("/{id:guid}/partes/faltantes", ListarPartesFaltantesAsync);
         grupo.MapGet("/{id:guid}/partes/{numero:int}/url", ObterUrlDeParteAsync);
         grupo.MapPost("/{id:guid}/finalizar", FinalizarAsync);
+        grupo.MapPost("/{id:guid}/confirmar", ConfirmarAsync);
         grupo.MapGet("/{id:guid}/download", ObterDownloadAsync);
     }
 
@@ -60,6 +61,15 @@ public static class ArquivosEndpoints
     {
         var partes = requisicao.Partes.Select(p => new ParteEnviada(p.Numero, p.ETag)).ToList();
         await casoDeUso.ExecutarAsync(id, partes, cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> ConfirmarAsync(
+        Guid id,
+        ConfirmarUploadUnico casoDeUso,
+        CancellationToken cancellationToken)
+    {
+        await casoDeUso.ExecutarAsync(id, cancellationToken);
         return Results.NoContent();
     }
 

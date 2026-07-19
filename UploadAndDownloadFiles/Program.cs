@@ -29,6 +29,7 @@ builder.Services.AddScoped<RegistrarArquivo>();
 builder.Services.AddScoped<ObterUrlDeParte>();
 builder.Services.AddScoped<ListarPartesFaltantes>();
 builder.Services.AddScoped<FinalizarUpload>();
+builder.Services.AddScoped<ConfirmarUploadUnico>();
 builder.Services.AddScoped<ObterDownload>();
 builder.Services.AddScoped<ReconciliarArquivos>();
 builder.Services.AddHostedService<ReconciliacaoDiariaBackgroundService>();
