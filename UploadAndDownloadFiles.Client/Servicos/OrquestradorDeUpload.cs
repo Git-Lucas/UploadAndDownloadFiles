@@ -42,6 +42,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         string idInputArquivo,
         ModoUpload modo,
         string? urlUpload,
+        string? cabecalhoContentDisposition,
         long? tamanhoParte,
         Action<string>? aoProgredir = null,
         CancellationToken cancellationToken = default)
@@ -49,7 +50,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         if (modo == ModoUpload.PutUnico)
         {
             aoProgredir?.Invoke("Enviando arquivo...");
-            await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!);
+            await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!, cabecalhoContentDisposition!);
 
             aoProgredir?.Invoke("Confirmando upload...");
             var respostaConfirmar = await _http.PostAsync($"/api/arquivos/put-unico/{id}/confirmar", content: null, cancellationToken);

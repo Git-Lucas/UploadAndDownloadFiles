@@ -34,6 +34,7 @@ public static class ArquivosEndpoints
             resultado.Id,
             resultado.Modo,
             resultado.UrlUpload,
+            resultado.CabecalhoContentDisposition,
             resultado.TamanhoParte,
             resultado.QuantidadePartesEsperada);
     }

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using UploadAndDownloadFiles.Dominio.Excecoes;
 using UploadAndDownloadFiles.Shared;
 
@@ -52,7 +54,7 @@ public sealed class Arquivo
             throw new ArgumentOutOfRangeException(nameof(tamanhoDeclarado), "Tamanho declarado deve ser maior que zero.");
 
         var id = Guid.NewGuid();
-        var chave = $"{id}/{nomeOriginal}";
+        var chave = $"{id}/{SanitizarParaChave(nomeOriginal)}";
         var agora = DateTime.UtcNow;
 
         var arquivo = new Arquivo(id, chave, nomeOriginal, tamanhoDeclarado, agora);
@@ -65,6 +67,47 @@ public sealed class Arquivo
         }
 
         return arquivo;
+    }
+
+    /// <summary>
+    /// Reduz o nome do arquivo a um segmento de chave ASCII-safe (letras, dígitos, <c>. _ -</c>).
+    /// As CloudFront Signed URLs de política canônica exigem que o <c>Resource</c> assinado bata
+    /// byte a byte com a URL que o navegador requisita; como o navegador percent-encoda espaços e
+    /// acentos, uma chave com esses caracteres produz assinatura divergente e <c>AccessDenied</c>.
+    /// Manter a chave ASCII-safe elimina a divergência na origem. O nome de exibição continua
+    /// preservado em <see cref="NomeOriginal"/>.
+    /// </summary>
+    private static string SanitizarParaChave(string nomeOriginal)
+    {
+        var semDiacriticos = RemoverDiacriticos(nomeOriginal.Trim());
+        var construtor = new StringBuilder(semDiacriticos.Length);
+
+        foreach (var caractere in semDiacriticos)
+        {
+            if (char.IsAsciiLetterOrDigit(caractere) || caractere is '.' or '_' or '-')
+                construtor.Append(caractere);
+            else if (construtor.Length > 0 && construtor[^1] != '-')
+                construtor.Append('-');
+        }
+
+        var sanitizado = construtor.ToString().Trim('-', '.');
+
+        return sanitizado.Length > 0 ? sanitizado : "arquivo";
+    }
+
+    /// <summary>Decompõe os caracteres acentuados e descarta as marcas de acentuação (á → a).</summary>
+    private static string RemoverDiacriticos(string texto)
+    {
+        var decomposto = texto.Normalize(NormalizationForm.FormD);
+        var construtor = new StringBuilder(decomposto.Length);
+
+        foreach (var caractere in decomposto)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(caractere) != UnicodeCategory.NonSpacingMark)
+                construtor.Append(caractere);
+        }
+
+        return construtor.ToString().Normalize(NormalizationForm.FormC);
     }
 
     /// <summary>

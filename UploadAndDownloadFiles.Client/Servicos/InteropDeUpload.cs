@@ -23,10 +23,10 @@ public sealed class InteropDeUpload(IJSRuntime jsRuntime) : IAsyncDisposable
         return await modulo.InvokeAsync<string?>("obterNomeArquivo", idInputArquivo);
     }
 
-    public async Task EnviarArquivoCompletoAsync(string idInputArquivo, string url)
+    public async Task EnviarArquivoCompletoAsync(string idInputArquivo, string url, string cabecalhoContentDisposition)
     {
         var modulo = await _moduloJs.Value;
-        await modulo.InvokeVoidAsync("enviarArquivoCompleto", idInputArquivo, url);
+        await modulo.InvokeVoidAsync("enviarArquivoCompleto", idInputArquivo, url, cabecalhoContentDisposition);
     }
 
     public async Task<string> EnviarParteAsync(string idInputArquivo, int numeroParte, long tamanhoParte, string url)

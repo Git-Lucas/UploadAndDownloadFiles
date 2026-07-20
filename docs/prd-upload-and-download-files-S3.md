@@ -22,11 +22,11 @@ Arquivos de até vários TB não podem trafegar pelo backend (custo, memória, g
 
 ## 5. Capacidades e requisitos
 
-**C1 — Registro do arquivo.** Ao receber a primeira requisição, o sistema cria um registro com status `Pendente`, gerando internamente a chave (key) do objeto — nunca aceita a chave vinda do cliente.
+**C1 — Registro do arquivo.** Ao receber a primeira requisição, o sistema cria um registro com status `Pendente`, gerando internamente a chave (key) do objeto — nunca aceita a chave vinda do cliente. A chave é `{id}/{nome-sanitizado}`, restrita a ASCII (letras, dígitos, `.`, `_`, `-`); o nome de exibição original é preservado à parte, em `NomeOriginal`.
 
-**C2 — Upload pequeno (< 100 MB).** O sistema fornece uma URL pré-assinada de PUT único para envio direto ao S3. Após o envio, o cliente confirma a conclusão; o sistema verifica a existência do objeto (`HeadObject`) e atualiza o status para `Completo`.
+**C2 — Upload pequeno (< 100 MB).** O sistema fornece uma URL pré-assinada de PUT único para envio direto ao S3, com o `Content-Disposition` do nome original incluído na assinatura (o cliente o reenvia no PUT). Após o envio, o cliente confirma a conclusão; o sistema verifica a existência do objeto (`HeadObject`) e atualiza o status para `Completo`.
 
-**C3 — Upload grande (≥ 100 MB).** O sistema inicia um multipart upload, persiste o `uploadId`, e fornece URLs pré-assinadas **por parte, sob demanda**, com tamanho de parte adaptativo que respeita o limite de 10.000 partes até 5 TB.
+**C3 — Upload grande (≥ 100 MB).** O sistema inicia um multipart upload gravando ali o `Content-Disposition` do nome original, persiste o `uploadId`, e fornece URLs pré-assinadas **por parte, sob demanda**, com tamanho de parte adaptativo que respeita o limite de 10.000 partes até 5 TB.
 
 **C4 — Retomada.** Após interrupção, o cliente pode reenviar apenas as partes faltantes; as partes já aceitas pelo S3 não são reenviadas.
 
@@ -40,7 +40,7 @@ Arquivos de até vários TB não podem trafegar pelo backend (custo, memória, g
 
 **C9 — Limpeza de partes órfãs.** Partes de uploads incompletos são removidas automaticamente pelo storage após o prazo definido.
 
-**C10 — Download.** O cliente solicita o download por ID; o sistema retorna uma URL assinada de CDN com expiração curta, servindo o arquivo com cache no edge, mantendo o bucket privado.
+**C10 — Download.** O cliente solicita o download por ID; o sistema retorna uma URL assinada de CDN com expiração curta, servindo o arquivo com cache no edge, mantendo o bucket privado. O arquivo é salvo com o nome de exibição original, vindo do `Content-Disposition` gravado no objeto durante o upload — a chave do S3 é sanitizada para ASCII e não carrega esse nome.
 
 ## 6. Critérios de aceite
 

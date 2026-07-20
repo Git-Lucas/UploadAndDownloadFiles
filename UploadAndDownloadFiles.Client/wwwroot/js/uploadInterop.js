@@ -21,13 +21,21 @@ export function obterNomeArquivo(idInputArquivo) {
     return arquivo ? arquivo.name : null;
 }
 
-export async function enviarArquivoCompleto(idInputArquivo, url) {
+// O cabeçalho Content-Disposition faz parte da assinatura da URL pré-assinada e precisa ser
+// repetido aqui exatamente como o backend o montou — alterá-lo ou omiti-lo causa
+// SignatureDoesNotMatch. Ele grava o nome de exibição original no objeto, já que a chave do S3 é
+// sanitizada para ASCII.
+export async function enviarArquivoCompleto(idInputArquivo, url, contentDisposition) {
     const arquivo = obterArquivoSelecionado(idInputArquivo);
     if (!arquivo) {
         throw new Error("Nenhum arquivo selecionado.");
     }
 
-    const resposta = await fetch(url, { method: "PUT", body: arquivo });
+    const resposta = await fetch(url, {
+        method: "PUT",
+        body: arquivo,
+        headers: { "Content-Disposition": contentDisposition },
+    });
     if (!resposta.ok) {
         throw new Error(`Falha ao enviar arquivo (status ${resposta.status}).`);
     }
