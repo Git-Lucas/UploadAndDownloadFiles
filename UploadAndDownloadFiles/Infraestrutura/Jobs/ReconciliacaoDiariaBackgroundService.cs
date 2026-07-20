@@ -8,7 +8,7 @@ namespace UploadAndDownloadFiles.Infraestrutura.Jobs;
 /// </summary>
 public sealed class ReconciliacaoDiariaBackgroundService(IServiceScopeFactory fabricaDeEscopos, ILogger<ReconciliacaoDiariaBackgroundService> logger) : BackgroundService
 {
-    private static readonly TimeSpan IntervaloEntreExecucoes = TimeSpan.FromDays(1);
+    private static readonly TimeSpan s_intervaloEntreExecucoes = TimeSpan.FromDays(1);
 
     private readonly IServiceScopeFactory _fabricaDeEscopos = fabricaDeEscopos;
     private readonly ILogger<ReconciliacaoDiariaBackgroundService> _logger = logger;
@@ -28,7 +28,7 @@ public sealed class ReconciliacaoDiariaBackgroundService(IServiceScopeFactory fa
                 _logger.LogError(ex, "Falha ao executar a reconciliação diária de arquivos.");
             }
 
-            await Task.Delay(IntervaloEntreExecucoes, stoppingToken);
+            await Task.Delay(s_intervaloEntreExecucoes, stoppingToken);
         }
     }
 }

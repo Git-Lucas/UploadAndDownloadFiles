@@ -13,7 +13,7 @@ namespace UploadAndDownloadFiles.Testes.Integracao;
 /// Exercita `ReconciliarArquivos` de ponta a ponta contra o `DbContext` (EF InMemory) resolvido
 /// via DI, cobrindo a matriz de reconciliação para registros não finalizados há mais de 24h.
 /// </summary>
-public class ReconciliacaoIntegracaoTestes : IDisposable
+public sealed class ReconciliacaoIntegracaoTestes : IDisposable
 {
     private const long Mb = 1024 * 1024;
 

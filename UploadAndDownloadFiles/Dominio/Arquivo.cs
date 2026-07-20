@@ -12,7 +12,7 @@ public sealed class Arquivo
     public const long TamanhoMinimoParteEmBytes = 100L * 1024 * 1024;
     public const long LimiarMultipartEmBytes = TamanhoMinimoParteEmBytes;
     public const int LimiteMaximoDePartes = 10_000;
-    private const int _divisorAlvoDeParticionamento = 9500;
+    private const int DivisorAlvoDeParticionamento = 9500;
 
     public Guid Id { get; private set; }
     public string Chave { get; private set; } = string.Empty;
@@ -76,7 +76,7 @@ public sealed class Arquivo
         if (tamanhoDeclarado <= 0)
             throw new ArgumentOutOfRangeException(nameof(tamanhoDeclarado), "Tamanho declarado deve ser maior que zero.");
 
-        var tamanhoParteAlvo = DivisaoComArredondamentoParaCima(tamanhoDeclarado, _divisorAlvoDeParticionamento);
+        var tamanhoParteAlvo = DivisaoComArredondamentoParaCima(tamanhoDeclarado, DivisorAlvoDeParticionamento);
         var tamanhoParte = Math.Max(TamanhoMinimoParteEmBytes, tamanhoParteAlvo);
         var quantidadePartesEsperada = (int)DivisaoComArredondamentoParaCima(tamanhoDeclarado, tamanhoParte);
 

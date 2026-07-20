@@ -8,7 +8,7 @@ namespace UploadAndDownloadFiles.Infraestrutura.Aws;
 
 public sealed class ArmazenamentoObjetosS3(IAmazonS3 s3, IOptions<OpcoesArmazenamentoS3> opcoes) : IArmazenamentoObjetos
 {
-    private static readonly TimeSpan ExpiracaoUrlPreAssinada = TimeSpan.FromHours(1);
+    private static readonly TimeSpan s_expiracaoUrlPreAssinada = TimeSpan.FromHours(1);
 
     private readonly IAmazonS3 _s3 = s3;
     private readonly string _nomeBucket = opcoes.Value.NomeBucket;
@@ -20,7 +20,7 @@ public sealed class ArmazenamentoObjetosS3(IAmazonS3 s3, IOptions<OpcoesArmazena
             BucketName = _nomeBucket,
             Key = chave,
             Verb = HttpVerb.PUT,
-            Expires = DateTime.UtcNow.Add(ExpiracaoUrlPreAssinada),
+            Expires = DateTime.UtcNow.Add(s_expiracaoUrlPreAssinada),
         };
         request.Headers.ContentLength = tamanho;
 
@@ -42,7 +42,7 @@ public sealed class ArmazenamentoObjetosS3(IAmazonS3 s3, IOptions<OpcoesArmazena
             Verb = HttpVerb.PUT,
             UploadId = idUploadS3,
             PartNumber = numeroParte,
-            Expires = DateTime.UtcNow.Add(ExpiracaoUrlPreAssinada),
+            Expires = DateTime.UtcNow.Add(s_expiracaoUrlPreAssinada),
         };
         request.Headers.ContentLength = tamanhoParte;
 

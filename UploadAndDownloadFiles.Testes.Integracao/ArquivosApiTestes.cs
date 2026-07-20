@@ -8,7 +8,7 @@ using UploadAndDownloadFiles.Shared.Dtos;
 
 namespace UploadAndDownloadFiles.Testes.Integracao;
 
-public class ArquivosApiTestes : IDisposable
+public sealed class ArquivosApiTestes : IDisposable
 {
     private const long Mb = 1024 * 1024;
 

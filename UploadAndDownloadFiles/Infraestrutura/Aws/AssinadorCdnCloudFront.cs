@@ -12,7 +12,7 @@ namespace UploadAndDownloadFiles.Infraestrutura.Aws;
 /// </summary>
 public sealed class AssinadorCdnCloudFront : IAssinadorCdn
 {
-    private static readonly TimeSpan ExpiracaoUrlAssinada = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan s_expiracaoUrlAssinada = TimeSpan.FromMinutes(15);
 
     private readonly OpcoesCloudFront _opcoes;
     private readonly Lazy<RSA> _chavePrivada;
@@ -26,7 +26,7 @@ public sealed class AssinadorCdnCloudFront : IAssinadorCdn
     public string GerarUrlAssinada(string chave)
     {
         var urlRecurso = $"https://{_opcoes.DominioDistribuicao}/{chave}";
-        var expiraEm = DateTimeOffset.UtcNow.Add(ExpiracaoUrlAssinada).ToUnixTimeSeconds();
+        var expiraEm = DateTimeOffset.UtcNow.Add(s_expiracaoUrlAssinada).ToUnixTimeSeconds();
         var politica = ConstruirPoliticaCanonica(urlRecurso, expiraEm);
         var assinatura = AssinarPolitica(politica);
 

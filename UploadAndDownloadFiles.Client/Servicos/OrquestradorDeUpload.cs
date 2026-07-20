@@ -16,7 +16,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
 {
     private const int ConcorrenciaMaxima = 4;
     private const int TentativasMaximasPorParte = 5;
-    private static readonly TimeSpan BackoffBase = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan s_backoffBase = TimeSpan.FromSeconds(1);
 
     private readonly HttpClient _http = http;
     private readonly InteropDeUpload _interop = interop;
@@ -116,7 +116,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
             catch (Exception ex) when (tentativa < TentativasMaximasPorParte)
             {
                 ultimaFalha = ex;
-                var espera = BackoffBase * Math.Pow(2, tentativa - 1);
+                var espera = s_backoffBase * Math.Pow(2, tentativa - 1);
                 await Task.Delay(espera, cancellationToken);
             }
         }
