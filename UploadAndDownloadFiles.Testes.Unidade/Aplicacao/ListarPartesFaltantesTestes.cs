@@ -34,6 +34,6 @@ public class ListarPartesFaltantesTestes
 
         var faltantes = await casoDeUso.ExecutarAsync(arquivo.Id);
 
-        Assert.Equal(new[] { 2, totalPartes }, faltantes);
+        Assert.Equal([2, totalPartes], faltantes);
     }
 }

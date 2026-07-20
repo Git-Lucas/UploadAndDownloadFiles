@@ -82,7 +82,7 @@ public class ReconciliacaoIntegracaoTestes : IDisposable
             .ReturnsAsync(200 * Mb);
         _factory.MockArmazenamento
             .Setup(a => a.ListarPartesEnviadasAsync(arquivo.Chave, "upload-id-antigo", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Range(1, totalPartes).Select(n => new ParteEnviada(n, $"etag-{n}")).ToList());
+            .ReturnsAsync([.. Enumerable.Range(1, totalPartes).Select(n => new ParteEnviada(n, $"etag-{n}"))]);
 
         await ExecutarReconciliacaoAsync();
 
@@ -105,7 +105,7 @@ public class ReconciliacaoIntegracaoTestes : IDisposable
             .ReturnsAsync((long?)null);
         _factory.MockArmazenamento
             .Setup(a => a.ListarPartesEnviadasAsync(arquivo.Chave, "upload-id-antigo", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ParteEnviada> { new(1, "etag-1") });
+            .ReturnsAsync([new(1, "etag-1")]);
 
         await ExecutarReconciliacaoAsync();
 
@@ -158,5 +158,9 @@ public class ReconciliacaoIntegracaoTestes : IDisposable
         return (await contexto.Arquivos.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id))!;
     }
 
-    public void Dispose() => _factory.Dispose();
+    public void Dispose()
+    {
+        _factory.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

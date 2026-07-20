@@ -6,15 +6,10 @@ namespace UploadAndDownloadFiles.Client.Servicos;
 /// Wrapper do módulo JS `uploadInterop.js`. Os bytes do arquivo nunca passam pelo runtime .NET:
 /// o JS lê o `File` diretamente do input, fatia com `Blob.slice` e envia via `fetch`.
 /// </summary>
-public sealed class InteropDeUpload : IAsyncDisposable
+public sealed class InteropDeUpload(IJSRuntime jsRuntime) : IAsyncDisposable
 {
-    private readonly Lazy<Task<IJSObjectReference>> _moduloJs;
-
-    public InteropDeUpload(IJSRuntime jsRuntime)
-    {
-        _moduloJs = new Lazy<Task<IJSObjectReference>>(() =>
-            jsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/uploadInterop.js").AsTask());
-    }
+    private readonly Lazy<Task<IJSObjectReference>> _moduloJs = new(() =>
+        jsRuntime.InvokeAsync<IJSObjectReference>("import", "./js/uploadInterop.js").AsTask());
 
     public async Task<long> ObterTamanhoArquivoAsync(string idInputArquivo)
     {

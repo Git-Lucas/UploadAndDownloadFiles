@@ -4,16 +4,10 @@ using UploadAndDownloadFiles.Shared;
 
 namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
 
-public sealed class ListarPartesFaltantes
+public sealed class ListarPartesFaltantes(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
 {
-    private readonly IRepositorioArquivos _repositorio;
-    private readonly IArmazenamentoObjetos _armazenamento;
-
-    public ListarPartesFaltantes(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
-    {
-        _repositorio = repositorio;
-        _armazenamento = armazenamento;
-    }
+    private readonly IRepositorioArquivos _repositorio = repositorio;
+    private readonly IArmazenamentoObjetos _armazenamento = armazenamento;
 
     public async Task<IReadOnlyList<int>> ExecutarAsync(Guid id, CancellationToken cancellationToken = default)
     {
@@ -26,8 +20,6 @@ public sealed class ListarPartesFaltantes
         var partesEnviadas = await _armazenamento.ListarPartesEnviadasAsync(arquivo.Chave, arquivo.IdUploadS3!, cancellationToken);
         var numerosEnviados = partesEnviadas.Select(p => p.Numero).ToHashSet();
 
-        return Enumerable.Range(1, arquivo.QuantidadePartesEsperada!.Value)
-            .Where(numero => !numerosEnviados.Contains(numero))
-            .ToList();
+        return [.. Enumerable.Range(1, arquivo.QuantidadePartesEsperada!.Value).Where(numero => !numerosEnviados.Contains(numero))];
     }
 }

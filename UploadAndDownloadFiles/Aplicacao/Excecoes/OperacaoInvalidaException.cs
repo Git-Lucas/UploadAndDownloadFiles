@@ -1,8 +1,3 @@
 namespace UploadAndDownloadFiles.Aplicacao.Excecoes;
 
-public sealed class OperacaoInvalidaException : Exception
-{
-    public OperacaoInvalidaException(string mensagem) : base(mensagem)
-    {
-    }
-}
+public sealed class OperacaoInvalidaException(string mensagem) : Exception(mensagem);

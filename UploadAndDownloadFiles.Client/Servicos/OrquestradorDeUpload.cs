@@ -12,22 +12,16 @@ namespace UploadAndDownloadFiles.Client.Servicos;
 /// <see cref="EnviarAsync"/>): reexecutar o envio (ex.: botão "Tentar novamente" após falha
 /// parcial) consulta novamente as partes faltantes e reaproveita os ETags já conhecidos.
 /// </summary>
-public sealed class OrquestradorDeUpload
+public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload interop)
 {
     private const int ConcorrenciaMaxima = 4;
     private const int TentativasMaximasPorParte = 5;
     private static readonly TimeSpan BackoffBase = TimeSpan.FromSeconds(1);
 
-    private readonly HttpClient _http;
-    private readonly InteropDeUpload _interop;
+    private readonly HttpClient _http = http;
+    private readonly InteropDeUpload _interop = interop;
     private readonly ConcurrentDictionary<int, string> _etagsConhecidos = new();
     private long _tamanhoParte;
-
-    public OrquestradorDeUpload(HttpClient http, InteropDeUpload interop)
-    {
-        _http = http;
-        _interop = interop;
-    }
 
     public async Task<RegistrarArquivoResponse> RegistrarAsync(string idInputArquivo, CancellationToken cancellationToken = default)
     {
@@ -98,7 +92,7 @@ public sealed class OrquestradorDeUpload
         aoProgredir?.Invoke("Finalizando upload...");
 
         var requisicaoFinalizar = new FinalizarUploadRequest(
-            _etagsConhecidos.OrderBy(p => p.Key).Select(p => new ParteEtag(p.Key, p.Value)).ToList());
+            [.. _etagsConhecidos.OrderBy(p => p.Key).Select(p => new ParteEtag(p.Key, p.Value))]);
 
         var respostaFinalizar = await _http.PostAsJsonAsync($"/api/arquivos/multipart/{id}/finalizar", requisicaoFinalizar, cancellationToken);
         respostaFinalizar.EnsureSuccessStatusCode();

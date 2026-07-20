@@ -6,16 +6,10 @@ using UploadAndDownloadFiles.Shared;
 namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
 
 /// <summary>Finaliza um upload multipart a partir dos ETags das partes. Idempotente.</summary>
-public sealed class FinalizarUpload
+public sealed class FinalizarUpload(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
 {
-    private readonly IRepositorioArquivos _repositorio;
-    private readonly IArmazenamentoObjetos _armazenamento;
-
-    public FinalizarUpload(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
-    {
-        _repositorio = repositorio;
-        _armazenamento = armazenamento;
-    }
+    private readonly IRepositorioArquivos _repositorio = repositorio;
+    private readonly IArmazenamentoObjetos _armazenamento = armazenamento;
 
     public async Task ExecutarAsync(Guid id, IReadOnlyList<ParteEnviada> partes, CancellationToken cancellationToken = default)
     {

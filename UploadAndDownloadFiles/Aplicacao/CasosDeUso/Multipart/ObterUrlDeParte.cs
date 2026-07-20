@@ -5,16 +5,10 @@ using UploadAndDownloadFiles.Shared;
 namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
 
 /// <summary>Obtém a URL pré-assinada de uma parte, sob demanda. Também serve para reassinatura.</summary>
-public sealed class ObterUrlDeParte
+public sealed class ObterUrlDeParte(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
 {
-    private readonly IRepositorioArquivos _repositorio;
-    private readonly IArmazenamentoObjetos _armazenamento;
-
-    public ObterUrlDeParte(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
-    {
-        _repositorio = repositorio;
-        _armazenamento = armazenamento;
-    }
+    private readonly IRepositorioArquivos _repositorio = repositorio;
+    private readonly IArmazenamentoObjetos _armazenamento = armazenamento;
 
     public async Task<string> ExecutarAsync(Guid id, int numeroParte, CancellationToken cancellationToken = default)
     {

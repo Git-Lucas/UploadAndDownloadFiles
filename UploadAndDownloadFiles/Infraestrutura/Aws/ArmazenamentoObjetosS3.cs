@@ -6,18 +6,12 @@ using UploadAndDownloadFiles.Aplicacao.Portas;
 
 namespace UploadAndDownloadFiles.Infraestrutura.Aws;
 
-public sealed class ArmazenamentoObjetosS3 : IArmazenamentoObjetos
+public sealed class ArmazenamentoObjetosS3(IAmazonS3 s3, IOptions<OpcoesArmazenamentoS3> opcoes) : IArmazenamentoObjetos
 {
     private static readonly TimeSpan ExpiracaoUrlPreAssinada = TimeSpan.FromHours(1);
 
-    private readonly IAmazonS3 _s3;
-    private readonly string _nomeBucket;
-
-    public ArmazenamentoObjetosS3(IAmazonS3 s3, IOptions<OpcoesArmazenamentoS3> opcoes)
-    {
-        _s3 = s3;
-        _nomeBucket = opcoes.Value.NomeBucket;
-    }
+    private readonly IAmazonS3 _s3 = s3;
+    private readonly string _nomeBucket = opcoes.Value.NomeBucket;
 
     public Task<string> CriarUrlDeUploadUnicoAsync(string chave, long tamanho, CancellationToken cancellationToken = default)
     {
@@ -87,7 +81,7 @@ public sealed class ArmazenamentoObjetosS3 : IArmazenamentoObjetos
             BucketName = _nomeBucket,
             Key = chave,
             UploadId = idUploadS3,
-            PartETags = partes.Select(p => new PartETag(p.Numero, p.ETag)).ToList(),
+            PartETags = [.. partes.Select(p => new PartETag(p.Numero, p.ETag))],
         };
 
         try

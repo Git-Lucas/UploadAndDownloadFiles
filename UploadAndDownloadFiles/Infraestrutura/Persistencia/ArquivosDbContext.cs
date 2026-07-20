@@ -3,12 +3,8 @@ using UploadAndDownloadFiles.Dominio;
 
 namespace UploadAndDownloadFiles.Infraestrutura.Persistencia;
 
-public sealed class ArquivosDbContext : DbContext
+public sealed class ArquivosDbContext(DbContextOptions<ArquivosDbContext> options) : DbContext(options)
 {
-    public ArquivosDbContext(DbContextOptions<ArquivosDbContext> options) : base(options)
-    {
-    }
-
     public DbSet<Arquivo> Arquivos => Set<Arquivo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

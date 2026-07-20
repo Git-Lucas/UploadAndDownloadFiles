@@ -49,7 +49,7 @@ public class ArquivosApiTestes : IDisposable
         var totalPartes = registro.QuantidadePartesEsperada!.Value;
         _factory.MockArmazenamento
             .Setup(a => a.ListarPartesEnviadasAsync(It.IsAny<string>(), "upload-id-teste", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ParteEnviada> { new(1, "etag-1") });
+            .ReturnsAsync([new(1, "etag-1")]);
 
         var respostaFaltantes = await _client.GetAsync($"/api/arquivos/multipart/{registro.Id}/partes/faltantes");
         respostaFaltantes.EnsureSuccessStatusCode();
@@ -154,5 +154,9 @@ public class ArquivosApiTestes : IDisposable
         Assert.Equal(HttpStatusCode.Conflict, respostaDownload.StatusCode);
     }
 
-    public void Dispose() => _factory.Dispose();
+    public void Dispose()
+    {
+        _factory.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }
