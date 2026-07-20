@@ -195,7 +195,7 @@ partes, abort e leitura de metadados (`HeadObject`) usados pela aplicação e pe
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AcessoAoBucketDeArquivos",
+      "Sid": "AcessoAosObjetosDoBucket",
       "Effect": "Allow",
       "Action": [
         "s3:PutObject",
@@ -204,10 +204,21 @@ partes, abort e leitura de metadados (`HeadObject`) usados pela aplicação e pe
         "s3:AbortMultipartUpload"
       ],
       "Resource": "arn:aws:s3:::<nome-do-bucket>/*"
+    },
+    {
+      "Sid": "ListagemDoBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::<nome-do-bucket>"
     }
   ]
 }
 ```
+
+> **Importante:** o statement `s3:ListBucket` é obrigatório (recurso a nível de bucket, **sem** o
+> sufixo `/*`). Sem ele, o `HeadObject` sobre uma chave **inexistente** retorna `403 Forbidden` em
+> vez de `404 Not Found`, quebrando a reconciliação de arquivos que existem no banco mas não no
+> bucket (a aplicação depende do 404 para marcar o registro como inválido/incompleto).
 
 Crie a role/usuário em **IAM** → **Roles**/**Users** → **Create** → anexe uma policy customizada
 com o JSON acima → associe a role ao recurso de computação (ou, em dev, configure as credenciais do
