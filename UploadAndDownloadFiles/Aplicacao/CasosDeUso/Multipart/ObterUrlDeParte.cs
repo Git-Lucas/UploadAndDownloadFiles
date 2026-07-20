@@ -2,7 +2,7 @@ using UploadAndDownloadFiles.Aplicacao.Excecoes;
 using UploadAndDownloadFiles.Aplicacao.Portas;
 using UploadAndDownloadFiles.Shared;
 
-namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso;
+namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
 
 /// <summary>Obtém a URL pré-assinada de uma parte, sob demanda. Também serve para reassinatura.</summary>
 public sealed class ObterUrlDeParte

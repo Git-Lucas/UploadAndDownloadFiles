@@ -1,5 +1,5 @@
 using Moq;
-using UploadAndDownloadFiles.Aplicacao.CasosDeUso;
+using UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
 using UploadAndDownloadFiles.Aplicacao.Modelos;
 using UploadAndDownloadFiles.Aplicacao.Portas;
 using UploadAndDownloadFiles.Dominio;

@@ -3,7 +3,7 @@ using UploadAndDownloadFiles.Aplicacao.Modelos;
 using UploadAndDownloadFiles.Aplicacao.Portas;
 using UploadAndDownloadFiles.Shared;
 
-namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso;
+namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
 
 /// <summary>Finaliza um upload multipart a partir dos ETags das partes. Idempotente.</summary>
 public sealed class FinalizarUpload

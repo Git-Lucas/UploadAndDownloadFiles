@@ -2,7 +2,7 @@ using UploadAndDownloadFiles.Aplicacao.Excecoes;
 using UploadAndDownloadFiles.Aplicacao.Portas;
 using UploadAndDownloadFiles.Shared;
 
-namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso;
+namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
 
 public sealed class ListarPartesFaltantes
 {

@@ -1,5 +1,5 @@
 using Moq;
-using UploadAndDownloadFiles.Aplicacao.CasosDeUso;
+using UploadAndDownloadFiles.Aplicacao.CasosDeUso.PutUnico;
 using UploadAndDownloadFiles.Aplicacao.Excecoes;
 using UploadAndDownloadFiles.Aplicacao.Portas;
 using UploadAndDownloadFiles.Dominio;

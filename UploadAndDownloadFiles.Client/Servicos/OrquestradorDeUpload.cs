@@ -58,7 +58,7 @@ public sealed class OrquestradorDeUpload
             await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!);
 
             aoProgredir?.Invoke("Confirmando upload...");
-            var respostaConfirmar = await _http.PostAsync($"/api/arquivos/{id}/confirmar", content: null, cancellationToken);
+            var respostaConfirmar = await _http.PostAsync($"/api/arquivos/put-unico/{id}/confirmar", content: null, cancellationToken);
             respostaConfirmar.EnsureSuccessStatusCode();
 
             aoProgredir?.Invoke("Upload concluído.");
@@ -71,7 +71,7 @@ public sealed class OrquestradorDeUpload
     private async Task EnviarMultipartAsync(Guid id, string idInputArquivo, long tamanhoParte, Action<string>? aoProgredir, CancellationToken cancellationToken)
     {
         _tamanhoParte = tamanhoParte;
-        var faltantesResposta = await _http.GetFromJsonAsync<PartesFaltantesResponse>($"/api/arquivos/{id}/partes/faltantes", cancellationToken);
+        var faltantesResposta = await _http.GetFromJsonAsync<PartesFaltantesResponse>($"/api/arquivos/multipart/{id}/partes/faltantes", cancellationToken);
         var faltantes = faltantesResposta!.NumerosFaltantes;
 
         aoProgredir?.Invoke($"{faltantes.Count} parte(s) a enviar.");
@@ -100,7 +100,7 @@ public sealed class OrquestradorDeUpload
         var requisicaoFinalizar = new FinalizarUploadRequest(
             _etagsConhecidos.OrderBy(p => p.Key).Select(p => new ParteEtag(p.Key, p.Value)).ToList());
 
-        var respostaFinalizar = await _http.PostAsJsonAsync($"/api/arquivos/{id}/finalizar", requisicaoFinalizar, cancellationToken);
+        var respostaFinalizar = await _http.PostAsJsonAsync($"/api/arquivos/multipart/{id}/finalizar", requisicaoFinalizar, cancellationToken);
         respostaFinalizar.EnsureSuccessStatusCode();
 
         aoProgredir?.Invoke("Upload concluído.");
@@ -116,7 +116,7 @@ public sealed class OrquestradorDeUpload
             {
                 // Sempre busca a URL sob demanda: cobre tanto o primeiro envio quanto a
                 // reassinatura de uma URL expirada numa tentativa anterior.
-                var urlParte = await _http.GetFromJsonAsync<UrlParteResponse>($"/api/arquivos/{id}/partes/{numeroParte}/url", cancellationToken);
+                var urlParte = await _http.GetFromJsonAsync<UrlParteResponse>($"/api/arquivos/multipart/{id}/partes/{numeroParte}/url", cancellationToken);
                 return await _interop.EnviarParteAsync(idInputArquivo, numeroParte, _tamanhoParte, urlParte!.Url);
             }
             catch (Exception ex) when (tentativa < TentativasMaximasPorParte)
