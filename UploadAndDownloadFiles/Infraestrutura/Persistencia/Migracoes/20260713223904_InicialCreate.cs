@@ -41,7 +41,7 @@ namespace UploadAndDownloadFiles.Infraestrutura.Persistencia.Migracoes
             migrationBuilder.CreateIndex(
                 name: "IX_Arquivos_Status_AtualizadoEm",
                 table: "Arquivos",
-                columns: new[] { "Status", "AtualizadoEm" });
+                columns: ["Status", "AtualizadoEm"]);
         }
 
         /// <inheritdoc />

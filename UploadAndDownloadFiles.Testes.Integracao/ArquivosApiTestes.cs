@@ -8,7 +8,7 @@ using UploadAndDownloadFiles.Shared.Dtos;
 
 namespace UploadAndDownloadFiles.Testes.Integracao;
 
-public class ArquivosApiTestes : IDisposable
+public sealed class ArquivosApiTestes : IDisposable
 {
     private const long Mb = 1024 * 1024;
 
@@ -41,7 +41,7 @@ public class ArquivosApiTestes : IDisposable
             .Setup(a => a.CriarUrlDeParteAsync(It.IsAny<string>(), "upload-id-teste", 1, It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("https://s3.exemplo/url-parte-1");
 
-        var respostaUrl = await _client.GetAsync($"/api/arquivos/{registro.Id}/partes/1/url");
+        var respostaUrl = await _client.GetAsync($"/api/arquivos/multipart/{registro.Id}/partes/1/url");
         respostaUrl.EnsureSuccessStatusCode();
         var urlParte = await respostaUrl.Content.ReadFromJsonAsync<UrlParteResponse>();
         Assert.Equal("https://s3.exemplo/url-parte-1", urlParte!.Url);
@@ -49,9 +49,9 @@ public class ArquivosApiTestes : IDisposable
         var totalPartes = registro.QuantidadePartesEsperada!.Value;
         _factory.MockArmazenamento
             .Setup(a => a.ListarPartesEnviadasAsync(It.IsAny<string>(), "upload-id-teste", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ParteEnviada> { new(1, "etag-1") });
+            .ReturnsAsync([new(1, "etag-1")]);
 
-        var respostaFaltantes = await _client.GetAsync($"/api/arquivos/{registro.Id}/partes/faltantes");
+        var respostaFaltantes = await _client.GetAsync($"/api/arquivos/multipart/{registro.Id}/partes/faltantes");
         respostaFaltantes.EnsureSuccessStatusCode();
         var faltantes = await respostaFaltantes.Content.ReadFromJsonAsync<PartesFaltantesResponse>();
         Assert.Equal(Enumerable.Range(2, totalPartes - 1), faltantes!.NumerosFaltantes);
@@ -61,7 +61,7 @@ public class ArquivosApiTestes : IDisposable
             .ReturnsAsync(200 * Mb);
 
         var etags = Enumerable.Range(1, totalPartes).Select(n => new ParteEtag(n, $"etag-{n}")).ToList();
-        var respostaFinalizar = await _client.PostAsJsonAsync($"/api/arquivos/{registro.Id}/finalizar", new FinalizarUploadRequest(etags));
+        var respostaFinalizar = await _client.PostAsJsonAsync($"/api/arquivos/multipart/{registro.Id}/finalizar", new FinalizarUploadRequest(etags));
         Assert.Equal(HttpStatusCode.NoContent, respostaFinalizar.StatusCode);
 
         _factory.MockAssinadorCdn
@@ -105,7 +105,7 @@ public class ArquivosApiTestes : IDisposable
             .Setup(a => a.ObterTamanhoObjetoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(10 * Mb);
 
-        var respostaConfirmar = await _client.PostAsync($"/api/arquivos/{registro!.Id}/confirmar", content: null);
+        var respostaConfirmar = await _client.PostAsync($"/api/arquivos/put-unico/{registro!.Id}/confirmar", content: null);
         Assert.Equal(HttpStatusCode.NoContent, respostaConfirmar.StatusCode);
 
         _factory.MockAssinadorCdn
@@ -126,7 +126,7 @@ public class ArquivosApiTestes : IDisposable
         var respostaRegistro = await _client.PostAsJsonAsync("/api/arquivos", new RegistrarArquivoRequest("foto.png", 10 * Mb));
         var registro = await respostaRegistro.Content.ReadFromJsonAsync<RegistrarArquivoResponse>();
 
-        var respostaConfirmar = await _client.PostAsync($"/api/arquivos/{registro!.Id}/confirmar", content: null);
+        var respostaConfirmar = await _client.PostAsync($"/api/arquivos/put-unico/{registro!.Id}/confirmar", content: null);
 
         Assert.Equal(HttpStatusCode.Conflict, respostaConfirmar.StatusCode);
     }
@@ -154,5 +154,9 @@ public class ArquivosApiTestes : IDisposable
         Assert.Equal(HttpStatusCode.Conflict, respostaDownload.StatusCode);
     }
 
-    public void Dispose() => _factory.Dispose();
+    public void Dispose()
+    {
+        _factory.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

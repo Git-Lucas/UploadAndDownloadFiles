@@ -16,7 +16,7 @@ public class ReconciliarArquivosTestes
         var repositorio = new Mock<IRepositorioArquivos>();
         repositorio
             .Setup(r => r.ObterNaoFinalizadosAntesDeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { arquivo });
+            .ReturnsAsync([arquivo]);
         return repositorio;
     }
 
@@ -101,7 +101,7 @@ public class ReconciliarArquivosTestes
         armazenamento.Setup(a => a.ObterTamanhoObjetoAsync(arquivo.Chave, It.IsAny<CancellationToken>())).ReturnsAsync((long?)null);
         armazenamento
             .Setup(a => a.ListarPartesEnviadasAsync(arquivo.Chave, "upload-id-123", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ParteEnviada> { new(1, "etag-1") });
+            .ReturnsAsync([new(1, "etag-1")]);
 
         await new ReconciliarArquivos(repositorio.Object, armazenamento.Object).ExecutarAsync();
 

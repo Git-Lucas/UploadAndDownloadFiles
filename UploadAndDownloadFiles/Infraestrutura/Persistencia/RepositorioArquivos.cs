@@ -5,14 +5,9 @@ using UploadAndDownloadFiles.Shared;
 
 namespace UploadAndDownloadFiles.Infraestrutura.Persistencia;
 
-public sealed class RepositorioArquivos : IRepositorioArquivos
+public sealed class RepositorioArquivos(ArquivosDbContext contexto) : IRepositorioArquivos
 {
-    private readonly ArquivosDbContext _contexto;
-
-    public RepositorioArquivos(ArquivosDbContext contexto)
-    {
-        _contexto = contexto;
-    }
+    private readonly ArquivosDbContext _contexto = contexto;
 
     public Task<Arquivo?> ObterPorIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         _contexto.Arquivos.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);

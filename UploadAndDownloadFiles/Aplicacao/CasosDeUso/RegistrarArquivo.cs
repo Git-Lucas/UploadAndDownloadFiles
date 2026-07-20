@@ -5,16 +5,10 @@ using UploadAndDownloadFiles.Shared;
 
 namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso;
 
-public sealed class RegistrarArquivo
+public sealed class RegistrarArquivo(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
 {
-    private readonly IRepositorioArquivos _repositorio;
-    private readonly IArmazenamentoObjetos _armazenamento;
-
-    public RegistrarArquivo(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
-    {
-        _repositorio = repositorio;
-        _armazenamento = armazenamento;
-    }
+    private readonly IRepositorioArquivos _repositorio = repositorio;
+    private readonly IArmazenamentoObjetos _armazenamento = armazenamento;
 
     public async Task<RegistroArquivoResultado> ExecutarAsync(string nomeArquivo, long tamanhoDeclarado, CancellationToken cancellationToken = default)
     {

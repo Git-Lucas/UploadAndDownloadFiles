@@ -6,18 +6,12 @@ namespace UploadAndDownloadFiles.Infraestrutura.Jobs;
 /// Executa a <see cref="ReconciliarArquivos"/> uma vez por dia. Cria um escopo de DI a cada
 /// execução, já que o repositório e o `DbContext` são registrados como `Scoped`.
 /// </summary>
-public sealed class ReconciliacaoDiariaBackgroundService : BackgroundService
+public sealed class ReconciliacaoDiariaBackgroundService(IServiceScopeFactory fabricaDeEscopos, ILogger<ReconciliacaoDiariaBackgroundService> logger) : BackgroundService
 {
-    private static readonly TimeSpan IntervaloEntreExecucoes = TimeSpan.FromDays(1);
+    private static readonly TimeSpan s_intervaloEntreExecucoes = TimeSpan.FromDays(1);
 
-    private readonly IServiceScopeFactory _fabricaDeEscopos;
-    private readonly ILogger<ReconciliacaoDiariaBackgroundService> _logger;
-
-    public ReconciliacaoDiariaBackgroundService(IServiceScopeFactory fabricaDeEscopos, ILogger<ReconciliacaoDiariaBackgroundService> logger)
-    {
-        _fabricaDeEscopos = fabricaDeEscopos;
-        _logger = logger;
-    }
+    private readonly IServiceScopeFactory _fabricaDeEscopos = fabricaDeEscopos;
+    private readonly ILogger<ReconciliacaoDiariaBackgroundService> _logger = logger;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -34,7 +28,7 @@ public sealed class ReconciliacaoDiariaBackgroundService : BackgroundService
                 _logger.LogError(ex, "Falha ao executar a reconciliação diária de arquivos.");
             }
 
-            await Task.Delay(IntervaloEntreExecucoes, stoppingToken);
+            await Task.Delay(s_intervaloEntreExecucoes, stoppingToken);
         }
     }
 }

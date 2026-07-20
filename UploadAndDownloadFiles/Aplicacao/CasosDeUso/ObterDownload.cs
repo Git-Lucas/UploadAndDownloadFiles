@@ -4,16 +4,10 @@ using UploadAndDownloadFiles.Shared;
 
 namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso;
 
-public sealed class ObterDownload
+public sealed class ObterDownload(IRepositorioArquivos repositorio, IAssinadorCdn assinadorCdn)
 {
-    private readonly IRepositorioArquivos _repositorio;
-    private readonly IAssinadorCdn _assinadorCdn;
-
-    public ObterDownload(IRepositorioArquivos repositorio, IAssinadorCdn assinadorCdn)
-    {
-        _repositorio = repositorio;
-        _assinadorCdn = assinadorCdn;
-    }
+    private readonly IRepositorioArquivos _repositorio = repositorio;
+    private readonly IAssinadorCdn _assinadorCdn = assinadorCdn;
 
     public async Task<string> ExecutarAsync(Guid id, CancellationToken cancellationToken = default)
     {

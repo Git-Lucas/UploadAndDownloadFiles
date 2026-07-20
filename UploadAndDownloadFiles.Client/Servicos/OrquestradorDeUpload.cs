@@ -12,22 +12,16 @@ namespace UploadAndDownloadFiles.Client.Servicos;
 /// <see cref="EnviarAsync"/>): reexecutar o envio (ex.: botão "Tentar novamente" após falha
 /// parcial) consulta novamente as partes faltantes e reaproveita os ETags já conhecidos.
 /// </summary>
-public sealed class OrquestradorDeUpload
+public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload interop)
 {
     private const int ConcorrenciaMaxima = 4;
     private const int TentativasMaximasPorParte = 5;
-    private static readonly TimeSpan BackoffBase = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan s_backoffBase = TimeSpan.FromSeconds(1);
 
-    private readonly HttpClient _http;
-    private readonly InteropDeUpload _interop;
+    private readonly HttpClient _http = http;
+    private readonly InteropDeUpload _interop = interop;
     private readonly ConcurrentDictionary<int, string> _etagsConhecidos = new();
     private long _tamanhoParte;
-
-    public OrquestradorDeUpload(HttpClient http, InteropDeUpload interop)
-    {
-        _http = http;
-        _interop = interop;
-    }
 
     public async Task<RegistrarArquivoResponse> RegistrarAsync(string idInputArquivo, CancellationToken cancellationToken = default)
     {
@@ -58,7 +52,7 @@ public sealed class OrquestradorDeUpload
             await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!);
 
             aoProgredir?.Invoke("Confirmando upload...");
-            var respostaConfirmar = await _http.PostAsync($"/api/arquivos/{id}/confirmar", content: null, cancellationToken);
+            var respostaConfirmar = await _http.PostAsync($"/api/arquivos/put-unico/{id}/confirmar", content: null, cancellationToken);
             respostaConfirmar.EnsureSuccessStatusCode();
 
             aoProgredir?.Invoke("Upload concluído.");
@@ -71,7 +65,7 @@ public sealed class OrquestradorDeUpload
     private async Task EnviarMultipartAsync(Guid id, string idInputArquivo, long tamanhoParte, Action<string>? aoProgredir, CancellationToken cancellationToken)
     {
         _tamanhoParte = tamanhoParte;
-        var faltantesResposta = await _http.GetFromJsonAsync<PartesFaltantesResponse>($"/api/arquivos/{id}/partes/faltantes", cancellationToken);
+        var faltantesResposta = await _http.GetFromJsonAsync<PartesFaltantesResponse>($"/api/arquivos/multipart/{id}/partes/faltantes", cancellationToken);
         var faltantes = faltantesResposta!.NumerosFaltantes;
 
         aoProgredir?.Invoke($"{faltantes.Count} parte(s) a enviar.");
@@ -98,9 +92,9 @@ public sealed class OrquestradorDeUpload
         aoProgredir?.Invoke("Finalizando upload...");
 
         var requisicaoFinalizar = new FinalizarUploadRequest(
-            _etagsConhecidos.OrderBy(p => p.Key).Select(p => new ParteEtag(p.Key, p.Value)).ToList());
+            [.. _etagsConhecidos.OrderBy(p => p.Key).Select(p => new ParteEtag(p.Key, p.Value))]);
 
-        var respostaFinalizar = await _http.PostAsJsonAsync($"/api/arquivos/{id}/finalizar", requisicaoFinalizar, cancellationToken);
+        var respostaFinalizar = await _http.PostAsJsonAsync($"/api/arquivos/multipart/{id}/finalizar", requisicaoFinalizar, cancellationToken);
         respostaFinalizar.EnsureSuccessStatusCode();
 
         aoProgredir?.Invoke("Upload concluído.");
@@ -116,13 +110,13 @@ public sealed class OrquestradorDeUpload
             {
                 // Sempre busca a URL sob demanda: cobre tanto o primeiro envio quanto a
                 // reassinatura de uma URL expirada numa tentativa anterior.
-                var urlParte = await _http.GetFromJsonAsync<UrlParteResponse>($"/api/arquivos/{id}/partes/{numeroParte}/url", cancellationToken);
+                var urlParte = await _http.GetFromJsonAsync<UrlParteResponse>($"/api/arquivos/multipart/{id}/partes/{numeroParte}/url", cancellationToken);
                 return await _interop.EnviarParteAsync(idInputArquivo, numeroParte, _tamanhoParte, urlParte!.Url);
             }
             catch (Exception ex) when (tentativa < TentativasMaximasPorParte)
             {
                 ultimaFalha = ex;
-                var espera = BackoffBase * Math.Pow(2, tentativa - 1);
+                var espera = s_backoffBase * Math.Pow(2, tentativa - 1);
                 await Task.Delay(espera, cancellationToken);
             }
         }

@@ -9,22 +9,16 @@ namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso;
 /// Para `Enviando`, verifica primeiro `HeadObject` e só então `ListParts` (cobre o caso de
 /// complete bem-sucedido no S3 mas falha ao atualizar o banco).
 /// </summary>
-public sealed class ReconciliarArquivos
+public sealed class ReconciliarArquivos(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
 {
-    private static readonly TimeSpan JanelaDeTolerancia = TimeSpan.FromHours(24);
+    private static readonly TimeSpan s_janelaDeTolerancia = TimeSpan.FromHours(24);
 
-    private readonly IRepositorioArquivos _repositorio;
-    private readonly IArmazenamentoObjetos _armazenamento;
-
-    public ReconciliarArquivos(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
-    {
-        _repositorio = repositorio;
-        _armazenamento = armazenamento;
-    }
+    private readonly IRepositorioArquivos _repositorio = repositorio;
+    private readonly IArmazenamentoObjetos _armazenamento = armazenamento;
 
     public async Task ExecutarAsync(CancellationToken cancellationToken = default)
     {
-        var limite = DateTime.UtcNow - JanelaDeTolerancia;
+        var limite = DateTime.UtcNow - s_janelaDeTolerancia;
         var registros = await _repositorio.ObterNaoFinalizadosAntesDeAsync(limite, cancellationToken);
 
         foreach (var arquivo in registros)

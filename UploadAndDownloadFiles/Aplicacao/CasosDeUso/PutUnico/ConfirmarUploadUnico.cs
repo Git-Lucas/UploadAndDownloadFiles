@@ -2,23 +2,17 @@ using UploadAndDownloadFiles.Aplicacao.Excecoes;
 using UploadAndDownloadFiles.Aplicacao.Portas;
 using UploadAndDownloadFiles.Shared;
 
-namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso;
+namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso.PutUnico;
 
 /// <summary>
 /// Confirma um upload PUT único logo após o envio, evitando esperar pela reconciliação
 /// periódica: verifica via `HeadObject` se o objeto já existe no S3 e, se sim, marca o
 /// registro como `Completo`. Idempotente.
 /// </summary>
-public sealed class ConfirmarUploadUnico
+public sealed class ConfirmarUploadUnico(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
 {
-    private readonly IRepositorioArquivos _repositorio;
-    private readonly IArmazenamentoObjetos _armazenamento;
-
-    public ConfirmarUploadUnico(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
-    {
-        _repositorio = repositorio;
-        _armazenamento = armazenamento;
-    }
+    private readonly IRepositorioArquivos _repositorio = repositorio;
+    private readonly IArmazenamentoObjetos _armazenamento = armazenamento;
 
     public async Task ExecutarAsync(Guid id, CancellationToken cancellationToken = default)
     {

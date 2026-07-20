@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using UploadAndDownloadFiles.Api;
 using UploadAndDownloadFiles.Api.Endpoints;
 using UploadAndDownloadFiles.Aplicacao.CasosDeUso;
+using UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
+using UploadAndDownloadFiles.Aplicacao.CasosDeUso.PutUnico;
 using UploadAndDownloadFiles.Aplicacao.Portas;
 using UploadAndDownloadFiles.Infraestrutura.Aws;
 using UploadAndDownloadFiles.Infraestrutura.Jobs;
@@ -71,5 +73,3 @@ app.MapArquivosEndpoints();
 app.MapFallbackToFile("index.html");
 
 await app.RunAsync();
-
-public partial class Program;
