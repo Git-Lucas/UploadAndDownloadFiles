@@ -6,5 +6,6 @@ public sealed record RegistroArquivoResultado(
     Guid Id,
     ModoUpload Modo,
     string? UrlUpload,
+    string? CabecalhoContentDisposition,
     long? TamanhoParte,
     int? QuantidadePartesEsperada);

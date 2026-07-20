@@ -15,14 +15,17 @@ public sealed class RegistrarArquivo(IRepositorioArquivos repositorio, IArmazena
         var arquivo = Arquivo.Registrar(nomeArquivo, tamanhoDeclarado);
 
         string? urlUpload = null;
+        string? cabecalhoContentDisposition = null;
 
         if (arquivo.Modo == ModoUpload.PutUnico)
         {
-            urlUpload = await _armazenamento.CriarUrlDeUploadUnicoAsync(arquivo.Chave, tamanhoDeclarado, cancellationToken);
+            var upload = await _armazenamento.CriarUrlDeUploadUnicoAsync(arquivo.Chave, tamanhoDeclarado, arquivo.NomeOriginal, cancellationToken);
+            urlUpload = upload.Url;
+            cabecalhoContentDisposition = upload.CabecalhoContentDisposition;
         }
         else
         {
-            var idUploadS3 = await _armazenamento.IniciarMultipartAsync(arquivo.Chave, cancellationToken);
+            var idUploadS3 = await _armazenamento.IniciarMultipartAsync(arquivo.Chave, arquivo.NomeOriginal, cancellationToken);
             arquivo.IniciarMultipart(idUploadS3);
         }
 
@@ -33,6 +36,7 @@ public sealed class RegistrarArquivo(IRepositorioArquivos repositorio, IArmazena
             arquivo.Id,
             arquivo.Modo,
             urlUpload,
+            cabecalhoContentDisposition,
             arquivo.TamanhoParte,
             arquivo.QuantidadePartesEsperada);
     }

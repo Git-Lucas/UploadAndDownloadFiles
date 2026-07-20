@@ -43,6 +43,36 @@ public class ArquivoTestes
     }
 
     [Theory]
+    [InlineData("Currículo Lucas de Oliveira.pdf", "Curriculo-Lucas-de-Oliveira.pdf")]
+    [InlineData("jre-8u461-windows-x64.exe", "jre-8u461-windows-x64.exe")]
+    [InlineData("relatório (final) v2.xlsx", "relatorio-final-v2.xlsx")]
+    [InlineData("  espaços   colapsados .txt", "espacos-colapsados-.txt")]
+    [InlineData("ação&ç@#.csv", "acao-c-.csv")]
+    public void Registrar_SanitizaNomeNaChave_MantendoNomeOriginalIntacto(string nomeOriginal, string segmentoEsperado)
+    {
+        var arquivo = Arquivo.Registrar(nomeOriginal, 10 * Mb);
+
+        Assert.Equal($"{arquivo.Id}/{segmentoEsperado}", arquivo.Chave);
+        Assert.Equal(nomeOriginal, arquivo.NomeOriginal);
+    }
+
+    [Fact]
+    public void Registrar_ComNomeSemCaracteresAproveitaveis_UsaSegmentoDeFallback()
+    {
+        var arquivo = Arquivo.Registrar("上传文件", 10 * Mb);
+
+        Assert.Equal($"{arquivo.Id}/arquivo", arquivo.Chave);
+    }
+
+    [Fact]
+    public void Registrar_GeraChaveApenasComCaracteresSegurosParaAssinaturaCloudFront()
+    {
+        var arquivo = Arquivo.Registrar("Currículo Lucas de Oliveira.pdf", 10 * Mb);
+
+        Assert.Equal(arquivo.Chave, Uri.EscapeDataString(arquivo.Chave).Replace("%2F", "/"));
+    }
+
+    [Theory]
     [InlineData(100L * 1024 * 1024)]
     [InlineData(500L * 1024 * 1024)]
     [InlineData(5L * 1024 * 1024 * 1024)]

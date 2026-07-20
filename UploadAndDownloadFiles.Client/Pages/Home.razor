@@ -57,6 +57,7 @@
     private Guid? _arquivoId;
     private ModoUpload _modo;
     private string? _urlUpload;
+    private string? _cabecalhoContentDisposition;
     private long? _tamanhoParte;
     private readonly List<string> _mensagens = new();
 
@@ -73,10 +74,11 @@
             _arquivoId = registro.Id;
             _modo = registro.Modo;
             _urlUpload = registro.UrlUpload;
+            _cabecalhoContentDisposition = registro.CabecalhoContentDisposition;
             _tamanhoParte = registro.TamanhoParte;
             _mensagens.Add($"Arquivo registrado (modo: {_modo}).");
 
-            await Orquestrador.EnviarAsync(registro.Id, IdInputArquivo, _modo, _urlUpload, _tamanhoParte, Progredir);
+            await Orquestrador.EnviarAsync(registro.Id, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir);
         }
         catch (Exception ex)
         {
@@ -96,7 +98,7 @@
         _enviando = true;
         try
         {
-            await Orquestrador.EnviarAsync(_arquivoId.Value, IdInputArquivo, _modo, _urlUpload, _tamanhoParte, Progredir);
+            await Orquestrador.EnviarAsync(_arquivoId.Value, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir);
         }
         catch (Exception ex)
         {

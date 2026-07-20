@@ -1,5 +1,6 @@
 using Moq;
 using UploadAndDownloadFiles.Aplicacao.CasosDeUso;
+using UploadAndDownloadFiles.Aplicacao.Modelos;
 using UploadAndDownloadFiles.Aplicacao.Portas;
 using UploadAndDownloadFiles.Dominio;
 using UploadAndDownloadFiles.Shared;
@@ -16,8 +17,8 @@ public class RegistrarArquivoTestes
         var repositorio = new Mock<IRepositorioArquivos>();
         var armazenamento = new Mock<IArmazenamentoObjetos>();
         armazenamento
-            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 50 * Mb, It.IsAny<CancellationToken>()))
-            .ReturnsAsync("https://s3/url-unica");
+            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 50 * Mb, "foto.png", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UrlDeUploadUnico("https://s3/url-unica", "attachment; filename=\"foto.png\""));
 
         var casoDeUso = new RegistrarArquivo(repositorio.Object, armazenamento.Object);
 
@@ -25,10 +26,11 @@ public class RegistrarArquivoTestes
 
         Assert.Equal(ModoUpload.PutUnico, resultado.Modo);
         Assert.Equal("https://s3/url-unica", resultado.UrlUpload);
+        Assert.Equal("attachment; filename=\"foto.png\"", resultado.CabecalhoContentDisposition);
         Assert.Null(resultado.TamanhoParte);
         Assert.Null(resultado.QuantidadePartesEsperada);
 
-        armazenamento.Verify(a => a.IniciarMultipartAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        armazenamento.Verify(a => a.IniciarMultipartAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         repositorio.Verify(r => r.AdicionarAsync(It.Is<Arquivo>(x => x.Status == StatusArquivo.Pendente), It.IsAny<CancellationToken>()), Times.Once);
         repositorio.Verify(r => r.SalvarAlteracoesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -39,7 +41,7 @@ public class RegistrarArquivoTestes
         var repositorio = new Mock<IRepositorioArquivos>();
         var armazenamento = new Mock<IArmazenamentoObjetos>();
         armazenamento
-            .Setup(a => a.IniciarMultipartAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(a => a.IniciarMultipartAsync(It.IsAny<string>(), "video.mp4", It.IsAny<CancellationToken>()))
             .ReturnsAsync("upload-id-123");
 
         var casoDeUso = new RegistrarArquivo(repositorio.Object, armazenamento.Object);
@@ -48,10 +50,11 @@ public class RegistrarArquivoTestes
 
         Assert.Equal(ModoUpload.Multipart, resultado.Modo);
         Assert.Null(resultado.UrlUpload);
+        Assert.Null(resultado.CabecalhoContentDisposition);
         Assert.NotNull(resultado.TamanhoParte);
         Assert.NotNull(resultado.QuantidadePartesEsperada);
 
-        armazenamento.Verify(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+        armazenamento.Verify(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         repositorio.Verify(
             r => r.AdicionarAsync(It.Is<Arquivo>(x => x.Status == StatusArquivo.Enviando && x.IdUploadS3 == "upload-id-123"), It.IsAny<CancellationToken>()),
             Times.Once);

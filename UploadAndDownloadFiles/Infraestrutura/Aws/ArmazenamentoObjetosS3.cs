@@ -13,8 +13,10 @@ public sealed class ArmazenamentoObjetosS3(IAmazonS3 s3, IOptions<OpcoesArmazena
     private readonly IAmazonS3 _s3 = s3;
     private readonly string _nomeBucket = opcoes.Value.NomeBucket;
 
-    public Task<string> CriarUrlDeUploadUnicoAsync(string chave, long tamanho, CancellationToken cancellationToken = default)
+    public async Task<UrlDeUploadUnico> CriarUrlDeUploadUnicoAsync(string chave, long tamanho, string nomeOriginal, CancellationToken cancellationToken = default)
     {
+        var contentDisposition = CabecalhoContentDisposition.Montar(nomeOriginal);
+
         var request = new GetPreSignedUrlRequest
         {
             BucketName = _nomeBucket,
@@ -23,13 +25,24 @@ public sealed class ArmazenamentoObjetosS3(IAmazonS3 s3, IOptions<OpcoesArmazena
             Expires = DateTime.UtcNow.Add(s_expiracaoUrlPreAssinada),
         };
         request.Headers.ContentLength = tamanho;
+        request.Headers.ContentDisposition = contentDisposition;
 
-        return _s3.GetPreSignedURLAsync(request);
+        var url = await _s3.GetPreSignedURLAsync(request);
+
+        return new UrlDeUploadUnico(url, contentDisposition);
     }
 
-    public async Task<string> IniciarMultipartAsync(string chave, CancellationToken cancellationToken = default)
+    public async Task<string> IniciarMultipartAsync(string chave, string nomeOriginal, CancellationToken cancellationToken = default)
     {
-        var response = await _s3.InitiateMultipartUploadAsync(_nomeBucket, chave, cancellationToken);
+        var request = new InitiateMultipartUploadRequest
+        {
+            BucketName = _nomeBucket,
+            Key = chave,
+        };
+        request.Headers.ContentDisposition = CabecalhoContentDisposition.Montar(nomeOriginal);
+
+        var response = await _s3.InitiateMultipartUploadAsync(request, cancellationToken);
+
         return response.UploadId;
     }
 

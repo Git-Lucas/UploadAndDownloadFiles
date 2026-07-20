@@ -24,7 +24,7 @@ public sealed class ArquivosApiTestes : IDisposable
     public async Task FluxoCompletoMultipart_RegistrarUrlPartesFaltantesFinalizarDownload()
     {
         _factory.MockArmazenamento
-            .Setup(a => a.IniciarMultipartAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(a => a.IniciarMultipartAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("upload-id-teste");
 
         var respostaRegistro = await _client.PostAsJsonAsync("/api/arquivos", new RegistrarArquivoRequest("video.mp4", 200 * Mb));
@@ -78,8 +78,8 @@ public sealed class ArquivosApiTestes : IDisposable
     public async Task RegistrarArquivoPequeno_RetornaUrlUnicaDePutSemMultipart()
     {
         _factory.MockArmazenamento
-            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 10 * Mb, It.IsAny<CancellationToken>()))
-            .ReturnsAsync("https://s3.exemplo/url-unica");
+            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 10 * Mb, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UrlDeUploadUnico("https://s3.exemplo/url-unica", "attachment; filename=\"foto.png\""));
 
         var resposta = await _client.PostAsJsonAsync("/api/arquivos", new RegistrarArquivoRequest("foto.png", 10 * Mb));
         resposta.EnsureSuccessStatusCode();
@@ -88,15 +88,15 @@ public sealed class ArquivosApiTestes : IDisposable
         Assert.Equal(ModoUpload.PutUnico, registro!.Modo);
         Assert.Equal("https://s3.exemplo/url-unica", registro.UrlUpload);
 
-        _factory.MockArmazenamento.Verify(a => a.IniciarMultipartAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _factory.MockArmazenamento.Verify(a => a.IniciarMultipartAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task ConfirmarPutUnico_ComObjetoNoS3_MarcaCompletoELiberaDownload()
     {
         _factory.MockArmazenamento
-            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 10 * Mb, It.IsAny<CancellationToken>()))
-            .ReturnsAsync("https://s3.exemplo/url-unica");
+            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 10 * Mb, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UrlDeUploadUnico("https://s3.exemplo/url-unica", "attachment; filename=\"foto.png\""));
 
         var respostaRegistro = await _client.PostAsJsonAsync("/api/arquivos", new RegistrarArquivoRequest("foto.png", 10 * Mb));
         var registro = await respostaRegistro.Content.ReadFromJsonAsync<RegistrarArquivoResponse>();
@@ -120,8 +120,8 @@ public sealed class ArquivosApiTestes : IDisposable
     public async Task ConfirmarPutUnico_ComObjetoAindaAusenteNoS3_Retorna409()
     {
         _factory.MockArmazenamento
-            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 10 * Mb, It.IsAny<CancellationToken>()))
-            .ReturnsAsync("https://s3.exemplo/url-unica");
+            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), 10 * Mb, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UrlDeUploadUnico("https://s3.exemplo/url-unica", "attachment; filename=\"foto.png\""));
 
         var respostaRegistro = await _client.PostAsJsonAsync("/api/arquivos", new RegistrarArquivoRequest("foto.png", 10 * Mb));
         var registro = await respostaRegistro.Content.ReadFromJsonAsync<RegistrarArquivoResponse>();
@@ -143,8 +143,8 @@ public sealed class ArquivosApiTestes : IDisposable
     public async Task Download_DeArquivoAindaNaoCompleto_Retorna409()
     {
         _factory.MockArmazenamento
-            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("https://s3.exemplo/url-unica");
+            .Setup(a => a.CriarUrlDeUploadUnicoAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UrlDeUploadUnico("https://s3.exemplo/url-unica", "attachment; filename=\"foto.png\""));
 
         var respostaRegistro = await _client.PostAsJsonAsync("/api/arquivos", new RegistrarArquivoRequest("foto.png", 10 * Mb));
         var registro = await respostaRegistro.Content.ReadFromJsonAsync<RegistrarArquivoResponse>();
