@@ -77,7 +77,7 @@ public sealed class ArmazenamentoObjetosS3(IAmazonS3 s3, IOptions<OpcoesArmazena
                 PartNumberMarker = marcadorDeParte,
             }, cancellationToken);
 
-            partes.AddRange(response.Parts
+            partes.AddRange((response.Parts ?? [])
                 .Where(p => p.PartNumber.HasValue)
                 .Select(p => new ParteEnviada(p.PartNumber!.Value, p.ETag)));
 
