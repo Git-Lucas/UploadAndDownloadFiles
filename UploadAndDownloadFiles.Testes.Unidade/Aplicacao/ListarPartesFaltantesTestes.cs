@@ -36,4 +36,26 @@ public class ListarPartesFaltantesTestes
 
         Assert.Equal([2, totalPartes], faltantes);
     }
+
+    [Fact]
+    public async Task RetornaListaVaziaQuandoArquivoJaEstaCompleto()
+    {
+        var arquivo = Arquivo.Registrar("video.mp4", 500 * Mb);
+        arquivo.IniciarMultipart("upload-id-123");
+        arquivo.Finalizar(500 * Mb);
+
+        var repositorio = new Mock<IRepositorioArquivos>();
+        repositorio.Setup(r => r.ObterPorIdAsync(arquivo.Id, It.IsAny<CancellationToken>())).ReturnsAsync(arquivo);
+
+        var armazenamento = new Mock<IArmazenamentoObjetos>();
+
+        var casoDeUso = new ListarPartesFaltantes(repositorio.Object, armazenamento.Object);
+
+        var faltantes = await casoDeUso.ExecutarAsync(arquivo.Id);
+
+        Assert.Empty(faltantes);
+        armazenamento.Verify(
+            a => a.ListarPartesEnviadasAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }

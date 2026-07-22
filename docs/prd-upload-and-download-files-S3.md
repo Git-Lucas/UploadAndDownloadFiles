@@ -28,7 +28,7 @@ Arquivos de até vários TB não podem trafegar pelo backend (custo, memória, g
 
 **C3 — Upload grande (≥ 100 MB).** O sistema inicia um multipart upload gravando ali o `Content-Disposition` do nome original, persiste o `uploadId`, e fornece URLs pré-assinadas **por parte, sob demanda**, com tamanho de parte adaptativo que respeita o limite de 10.000 partes até 5 TB.
 
-**C4 — Retomada.** Após interrupção, o cliente pode reenviar apenas as partes faltantes; as partes já aceitas pelo S3 não são reenviadas.
+**C4 — Retomada.** Após interrupção, o cliente pode reenviar apenas as partes faltantes; as partes já aceitas pelo S3 não são reenviadas. A consulta de partes faltantes é **idempotente**: quando o arquivo já está `Completo`, retorna lista vazia em vez de falhar, permitindo reexecutar o envio ("Tentar novamente") mesmo após a conclusão.
 
 **C5 — Expiração e reassinatura.** URLs pré-assinadas têm expiração curta; o cliente pode solicitar nova URL para uma parte quando a anterior expirar.
 

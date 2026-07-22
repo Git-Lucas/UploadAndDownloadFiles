@@ -1,54 +1,118 @@
 @page "/"
+@implements IAsyncDisposable
 @inject OrquestradorDeUpload Orquestrador
 @inject InteropDeUpload Interop
 @inject HttpClient Http
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 @using UploadAndDownloadFiles.Client.Servicos
 @using UploadAndDownloadFiles.Shared
 
 <PageTitle>Upload e Download de Arquivos</PageTitle>
 
-<h1>Upload e Download de Arquivos</h1>
+<div class="pagina">
+    <header class="topo">
+        <div class="topo-titulo">
+            <span class="topo-icone" aria-hidden="true">☁️</span>
+            <div>
+                <h1>Upload e Download de Arquivos</h1>
+                <p class="topo-subtitulo">Envio direto ao S3 com retomada e retentativa</p>
+            </div>
+        </div>
 
-<h2>Upload</h2>
+        <span class="status-conexao @ClasseEstado" role="status" aria-live="polite">
+            <span class="status-ponto" aria-hidden="true"></span>
+            @RotuloEstado
+        </span>
+    </header>
 
-<p>
-    <input type="file" id="arquivo-input" />
-</p>
+    <section class="cartao">
+        <h2>Enviar arquivo</h2>
 
-<p>
-    <button @onclick="EnviarAsync" disabled="@_enviando">Enviar</button>
-    @if (_arquivoId is not null)
-    {
-        <button @onclick="TentarNovamenteAsync" disabled="@_enviando">Tentar novamente</button>
-    }
-</p>
+        <label class="campo-arquivo @(_enviando ? "campo-arquivo--desabilitado" : "")" for="@IdInputArquivo">
+            <input type="file" id="@IdInputArquivo" @onchange="AoSelecionarArquivoAsync" disabled="@_enviando" />
+            <span class="campo-arquivo-icone" aria-hidden="true">📁</span>
+            <span class="campo-arquivo-texto">
+                @if (_nomeArquivo is null)
+                {
+                    <strong>Escolha um arquivo</strong>
+                    <small>ou arraste-o para esta área</small>
+                }
+                else
+                {
+                    <strong>@_nomeArquivo</strong>
+                    <small>@FormatarTamanho(_tamanhoArquivo)</small>
+                }
+            </span>
+        </label>
 
-@if (_arquivoId is not null)
-{
-    <p>Id do arquivo: <code>@_arquivoId</code></p>
-}
+        <div class="acoes">
+            <button class="botao botao--primario" @onclick="EnviarAsync" disabled="@(_enviando || _nomeArquivo is null)">
+                @if (_enviando)
+                {
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span>Enviando…</span>
+                }
+                else
+                {
+                    <span>Enviar</span>
+                }
+            </button>
+            @if (_arquivoId is not null)
+            {
+                <button class="botao botao--secundario" @onclick="TentarNovamenteAsync" disabled="@_enviando">
+                    Tentar novamente
+                </button>
+            }
+        </div>
 
-@if (_mensagens.Count > 0)
-{
-    <ul>
-        @foreach (var mensagem in _mensagens)
+        @if (_mostrarProgresso)
         {
-            <li>@mensagem</li>
+            <div class="progresso">
+                <div class="progresso-cabecalho">
+                    <span>@_statusAtual</span>
+                    <span class="progresso-percentual">@_progresso.ToString("0")%</span>
+                </div>
+                <div class="progresso-trilha" role="progressbar"
+                     aria-valuenow="@((int)_progresso)" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progresso-preenchimento @(_progresso >= 100 ? "progresso-preenchimento--completo" : "")"
+                         style="width:@_progresso.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                </div>
+            </div>
         }
-    </ul>
-}
 
-<h2>Download</h2>
+        @if (_arquivoId is not null)
+        {
+            <p class="id-arquivo">Id do arquivo: <code>@_arquivoId</code></p>
+        }
 
-<p>
-    <input type="text" @bind="_idParaDownload" placeholder="Id do arquivo" size="40" />
-    <button @onclick="BaixarAsync">Baixar</button>
-</p>
+        @if (_mensagens.Count > 0)
+        {
+            <details class="log" open>
+                <summary>Registro de eventos (@_mensagens.Count)</summary>
+                <ul>
+                    @foreach (var mensagem in _mensagens)
+                    {
+                        <li>@mensagem</li>
+                    }
+                </ul>
+            </details>
+        }
+    </section>
 
-@if (_erroDownload is not null)
-{
-    <p style="color:red">@_erroDownload</p>
-}
+    <section class="cartao">
+        <h2>Baixar arquivo</h2>
+
+        <div class="linha-download">
+            <input class="entrada" type="text" @bind="_idParaDownload" placeholder="Id do arquivo" />
+            <button class="botao botao--primario" @onclick="BaixarAsync">Baixar</button>
+        </div>
+
+        @if (_erroDownload is not null)
+        {
+            <p class="mensagem-erro">@_erroDownload</p>
+        }
+    </section>
+</div>
 
 @code {
     private const string IdInputArquivo = "arquivo-input";
@@ -61,13 +125,117 @@
     private long? _tamanhoParte;
     private readonly List<string> _mensagens = new();
 
+    private string? _nomeArquivo;
+    private long _tamanhoArquivo;
+
+    private bool _mostrarProgresso;
+    private double _progresso;
+    private string _statusAtual = "";
+
     private string? _idParaDownload;
     private string? _erroDownload;
+
+    private enum EstadoConexao { Online, Instavel, Offline }
+
+    // (A) alcançabilidade real reportada pelo heartbeat / navigator.onLine.
+    private bool _alcancavel = true;
+    // (B) saúde dos envios reais: fica false quando uma requisição de upload falha por rede e volta
+    // a true quando um envio conclui com sucesso.
+    private bool _uploadSaudavel = true;
+    private DotNetObjectReference<Home>? _referenciaConexao;
+
+    private EstadoConexao Estado
+    {
+        get
+        {
+            if (!_alcancavel)
+                return EstadoConexao.Offline;
+            if (!_uploadSaudavel)
+                return EstadoConexao.Instavel;
+            return EstadoConexao.Online;
+        }
+    }
+
+    private string ClasseEstado => Estado switch
+    {
+        EstadoConexao.Online => "status-conexao--online",
+        EstadoConexao.Instavel => "status-conexao--instavel",
+        _ => "status-conexao--offline",
+    };
+
+    private string RotuloEstado => Estado switch
+    {
+        EstadoConexao.Online => "Online",
+        EstadoConexao.Instavel => "Instável",
+        _ => "Offline",
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        // Recurso EXTERNO (configurável) sondado pelo heartbeat para aferir a internet real — o
+        // servidor local continua acessível sem internet, então não serve como sonda.
+        var urlHeartbeat = Config["Conectividade:UrlHeartbeat"] ?? string.Empty;
+        var periodoHeartbeatMs = int.TryParse(Config["Conectividade:PeriodoHeartbeatMs"], out var periodo) ? periodo : 5000;
+
+        _referenciaConexao = DotNetObjectReference.Create(this);
+        var online = await Interop.IniciarMonitorConexaoAsync(_referenciaConexao, urlHeartbeat, periodoHeartbeatMs);
+        if (online != _alcancavel)
+        {
+            _alcancavel = online;
+            StateHasChanged();
+        }
+    }
+
+    // (A) — resultado do heartbeat / eventos online-offline do browser.
+    [JSInvokable]
+    public void AtualizarConexao(bool alcancavel)
+    {
+        _alcancavel = alcancavel;
+        StateHasChanged();
+    }
+
+    // (B) — saúde da rede inferida das requisições de upload reais.
+    private void AoSaudeRede(bool saudavel)
+    {
+        _uploadSaudavel = saudavel;
+        // Uma falha de envio dispara uma sondagem imediata para confirmar se é queda real de internet.
+        if (!saudavel)
+            _ = SondarConectividadeAsync();
+        StateHasChanged();
+    }
+
+    private async Task SondarConectividadeAsync()
+    {
+        try
+        {
+            await Interop.SondarAgoraAsync();
+        }
+        catch (JSException)
+        {
+            // Sondagem best-effort; falha aqui não deve derrubar o fluxo de upload.
+        }
+        catch (JSDisconnectedException)
+        {
+            // Runtime JS encerrado (ex.: navegação).
+        }
+    }
+
+    private async Task AoSelecionarArquivoAsync()
+    {
+        _nomeArquivo = await Interop.ObterNomeArquivoAsync(IdInputArquivo);
+        _tamanhoArquivo = _nomeArquivo is null ? 0 : await Interop.ObterTamanhoArquivoAsync(IdInputArquivo);
+    }
 
     private async Task EnviarAsync()
     {
         _mensagens.Clear();
         _enviando = true;
+        _mostrarProgresso = true;
+        _progresso = 0;
+        _statusAtual = "Preparando envio…";
         try
         {
             var registro = await Orquestrador.RegistrarAsync(IdInputArquivo);
@@ -76,13 +244,13 @@
             _urlUpload = registro.UrlUpload;
             _cabecalhoContentDisposition = registro.CabecalhoContentDisposition;
             _tamanhoParte = registro.TamanhoParte;
-            _mensagens.Add($"Arquivo registrado (modo: {_modo}).");
+            Progredir($"Arquivo registrado (modo: {_modo}).");
 
-            await Orquestrador.EnviarAsync(registro.Id, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir);
+            await Orquestrador.EnviarAsync(registro.Id, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir, AtualizarProgresso, AoSaudeRede);
         }
         catch (Exception ex)
         {
-            _mensagens.Add($"Erro: {ex.Message}");
+            Progredir($"Erro: {ex.Message}");
         }
         finally
         {
@@ -96,13 +264,14 @@
             return;
 
         _enviando = true;
+        _mostrarProgresso = true;
         try
         {
-            await Orquestrador.EnviarAsync(_arquivoId.Value, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir);
+            await Orquestrador.EnviarAsync(_arquivoId.Value, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir, AtualizarProgresso, AoSaudeRede);
         }
         catch (Exception ex)
         {
-            _mensagens.Add($"Erro: {ex.Message}");
+            Progredir($"Erro: {ex.Message}");
         }
         finally
         {
@@ -112,7 +281,14 @@
 
     private void Progredir(string mensagem)
     {
+        _statusAtual = mensagem;
         _mensagens.Add(mensagem);
+        StateHasChanged();
+    }
+
+    private void AtualizarProgresso(double percentual)
+    {
+        _progresso = percentual;
         StateHasChanged();
     }
 
@@ -134,6 +310,35 @@
         catch (Exception ex)
         {
             _erroDownload = $"Erro: {ex.Message}";
+        }
+    }
+
+    private static string FormatarTamanho(long bytes)
+    {
+        string[] unidades = { "B", "KB", "MB", "GB", "TB" };
+        double tamanho = bytes;
+        var unidade = 0;
+        while (tamanho >= 1024 && unidade < unidades.Length - 1)
+        {
+            tamanho /= 1024;
+            unidade++;
+        }
+        return $"{tamanho.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} {unidades[unidade]}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_referenciaConexao is not null)
+        {
+            try
+            {
+                await Interop.PararMonitorConexaoAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // O runtime JS já foi encerrado (ex.: navegação); nada a limpar.
+            }
+            _referenciaConexao.Dispose();
         }
     }
 }
