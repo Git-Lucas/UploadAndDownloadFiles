@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Json;
+using Microsoft.JSInterop;
 using UploadAndDownloadFiles.Shared;
 using UploadAndDownloadFiles.Shared.Dtos;
 
@@ -45,13 +46,20 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         string? cabecalhoContentDisposition,
         long? tamanhoParte,
         Action<string>? aoProgredir = null,
+        Action<double>? aoAtualizarProgresso = null,
         CancellationToken cancellationToken = default)
     {
+        var tamanhoTotal = await _interop.ObterTamanhoArquivoAsync(idInputArquivo);
+
+        var relator = new RelatorDeProgresso(tamanhoTotal, pct => aoAtualizarProgresso?.Invoke(pct));
+        using var referenciaRelator = DotNetObjectReference.Create(relator);
+
         if (modo == ModoUpload.PutUnico)
         {
             aoProgredir?.Invoke("Enviando arquivo...");
-            await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!, cabecalhoContentDisposition!);
+            await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!, cabecalhoContentDisposition!, referenciaRelator);
 
+            relator.Reportar(0, tamanhoTotal);
             aoProgredir?.Invoke("Confirmando upload...");
             var respostaConfirmar = await _http.PostAsync($"/api/arquivos/put-unico/{id}/confirmar", content: null, cancellationToken);
             respostaConfirmar.EnsureSuccessStatusCode();
@@ -60,14 +68,33 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
             return;
         }
 
-        await EnviarMultipartAsync(id, idInputArquivo, tamanhoParte!.Value, aoProgredir, cancellationToken);
+        await EnviarMultipartAsync(id, idInputArquivo, tamanhoParte!.Value, tamanhoTotal, relator, referenciaRelator, aoProgredir, cancellationToken);
     }
 
-    private async Task EnviarMultipartAsync(Guid id, string idInputArquivo, long tamanhoParte, Action<string>? aoProgredir, CancellationToken cancellationToken)
+    private async Task EnviarMultipartAsync(
+        Guid id,
+        string idInputArquivo,
+        long tamanhoParte,
+        long tamanhoTotal,
+        RelatorDeProgresso relator,
+        DotNetObjectReference<RelatorDeProgresso> referenciaRelator,
+        Action<string>? aoProgredir,
+        CancellationToken cancellationToken)
     {
         _tamanhoParte = tamanhoParte;
         var faltantesResposta = await _http.GetFromJsonAsync<PartesFaltantesResponse>($"/api/arquivos/multipart/{id}/partes/faltantes", cancellationToken);
         var faltantes = faltantesResposta!.NumerosFaltantes;
+
+        // Contabiliza no progresso as partes que o servidor já recebeu (retomada), para a barra
+        // começar no ponto certo em vez de voltar a zero.
+        var totalPartes = (int)((tamanhoTotal + tamanhoParte - 1) / tamanhoParte);
+        var faltantesSet = faltantes.ToHashSet();
+        for (var numeroParte = 1; numeroParte <= totalPartes; numeroParte++)
+        {
+            if (!faltantesSet.Contains(numeroParte))
+                relator.Semear(numeroParte, TamanhoDaParte(numeroParte, tamanhoParte, tamanhoTotal));
+        }
+        relator.Notificar();
 
         aoProgredir?.Invoke($"{faltantes.Count} parte(s) a enviar.");
 
@@ -78,8 +105,9 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
             await semaforo.WaitAsync(cancellationToken);
             try
             {
-                var etag = await EnviarParteComRetentativaAsync(id, idInputArquivo, numeroParte, cancellationToken);
+                var etag = await EnviarParteComRetentativaAsync(id, idInputArquivo, numeroParte, referenciaRelator, cancellationToken);
                 _etagsConhecidos[numeroParte] = etag;
+                relator.Semear(numeroParte, TamanhoDaParte(numeroParte, tamanhoParte, tamanhoTotal));
                 aoProgredir?.Invoke($"Parte {numeroParte} enviada.");
             }
             finally
@@ -101,7 +129,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         aoProgredir?.Invoke("Upload concluído.");
     }
 
-    private async Task<string> EnviarParteComRetentativaAsync(Guid id, string idInputArquivo, int numeroParte, CancellationToken cancellationToken)
+    private async Task<string> EnviarParteComRetentativaAsync(Guid id, string idInputArquivo, int numeroParte, DotNetObjectReference<RelatorDeProgresso> referenciaRelator, CancellationToken cancellationToken)
     {
         Exception? ultimaFalha = null;
 
@@ -112,7 +140,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
                 // Sempre busca a URL sob demanda: cobre tanto o primeiro envio quanto a
                 // reassinatura de uma URL expirada numa tentativa anterior.
                 var urlParte = await _http.GetFromJsonAsync<UrlParteResponse>($"/api/arquivos/multipart/{id}/partes/{numeroParte}/url", cancellationToken);
-                return await _interop.EnviarParteAsync(idInputArquivo, numeroParte, _tamanhoParte, urlParte!.Url);
+                return await _interop.EnviarParteAsync(idInputArquivo, numeroParte, _tamanhoParte, urlParte!.Url, referenciaRelator);
             }
             catch (Exception ex) when (tentativa < TentativasMaximasPorParte)
             {
@@ -123,5 +151,11 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         }
 
         throw new InvalidOperationException($"Falha ao enviar a parte {numeroParte} após {TentativasMaximasPorParte} tentativas.", ultimaFalha);
+    }
+
+    private static long TamanhoDaParte(int numeroParte, long tamanhoParte, long tamanhoTotal)
+    {
+        var inicio = (numeroParte - 1) * tamanhoParte;
+        return Math.Min(tamanhoParte, tamanhoTotal - inicio);
     }
 }

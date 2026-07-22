@@ -1,15 +1,442 @@
-.valid.modified:not([type=checkbox]) {
-    outline: 1px solid #26b050;
+/* =========================================================================================
+   Design tokens
+   ========================================================================================= */
+:root {
+    --cor-fundo: #eef2f7;
+    --cor-fundo-gradiente: radial-gradient(1200px 600px at 100% -10%, #dbeafe 0%, transparent 55%),
+                           radial-gradient(1000px 500px at -10% 110%, #e0e7ff 0%, transparent 50%);
+    --cor-superficie: #ffffff;
+    --cor-superficie-sutil: #f8fafc;
+    --cor-borda: #e2e8f0;
+    --cor-texto: #0f172a;
+    --cor-texto-suave: #64748b;
+    --cor-primaria: #2563eb;
+    --cor-primaria-escura: #1d4ed8;
+    --cor-primaria-suave: #eff6ff;
+    --cor-sucesso: #16a34a;
+    --cor-erro: #dc2626;
+    --cor-erro-suave: #fef2f2;
+    --sombra: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    --sombra-forte: 0 12px 32px rgba(37, 99, 235, 0.18);
+    --raio: 14px;
+    --raio-pequeno: 10px;
+    --fonte: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-.invalid {
-    outline: 1px solid red;
+@media (prefers-color-scheme: dark) {
+    :root {
+        --cor-fundo: #0b1120;
+        --cor-fundo-gradiente: radial-gradient(1200px 600px at 100% -10%, rgba(37, 99, 235, 0.18) 0%, transparent 55%),
+                               radial-gradient(1000px 500px at -10% 110%, rgba(99, 102, 241, 0.16) 0%, transparent 50%);
+        --cor-superficie: #131c31;
+        --cor-superficie-sutil: #0f1728;
+        --cor-borda: #263349;
+        --cor-texto: #e2e8f0;
+        --cor-texto-suave: #94a3b8;
+        --cor-primaria: #3b82f6;
+        --cor-primaria-escura: #2563eb;
+        --cor-primaria-suave: rgba(59, 130, 246, 0.12);
+        --cor-sucesso: #22c55e;
+        --cor-erro: #f87171;
+        --cor-erro-suave: rgba(248, 113, 113, 0.1);
+        --sombra: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+        --sombra-forte: 0 12px 32px rgba(0, 0, 0, 0.5);
+    }
 }
 
-.validation-message {
-    color: red;
+* {
+    box-sizing: border-box;
 }
 
+html, body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--fonte);
+    color: var(--cor-texto);
+    background-color: var(--cor-fundo);
+    background-image: var(--cor-fundo-gradiente);
+    background-attachment: fixed;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* =========================================================================================
+   Layout
+   ========================================================================================= */
+.pagina {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: clamp(1.25rem, 4vw, 3rem) 1.25rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.topo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.topo-titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+}
+
+.topo-icone {
+    font-size: 2rem;
+    line-height: 1;
+    filter: drop-shadow(0 4px 10px rgba(37, 99, 235, 0.35));
+}
+
+.topo h1 {
+    margin: 0;
+    font-size: clamp(1.35rem, 3.5vw, 1.7rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.topo-subtitulo {
+    margin: 0.1rem 0 0;
+    color: var(--cor-texto-suave);
+    font-size: 0.9rem;
+}
+
+/* =========================================================================================
+   Indicador de conexão
+   ========================================================================================= */
+.status-conexao {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.status-ponto {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.status-conexao--online {
+    color: var(--cor-sucesso);
+    background: color-mix(in srgb, var(--cor-sucesso) 12%, transparent);
+    border-color: color-mix(in srgb, var(--cor-sucesso) 30%, transparent);
+}
+
+.status-conexao--online .status-ponto {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cor-sucesso) 60%, transparent);
+    animation: pulso 2s infinite;
+}
+
+.status-conexao--offline {
+    color: var(--cor-erro);
+    background: color-mix(in srgb, var(--cor-erro) 12%, transparent);
+    border-color: color-mix(in srgb, var(--cor-erro) 30%, transparent);
+}
+
+@keyframes pulso {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cor-sucesso) 55%, transparent); }
+    70% { box-shadow: 0 0 0 0.5rem transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* =========================================================================================
+   Cartões
+   ========================================================================================= */
+.cartao {
+    background: var(--cor-superficie);
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
+    padding: clamp(1.25rem, 3vw, 1.75rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+.cartao h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+}
+
+/* =========================================================================================
+   Campo de arquivo
+   ========================================================================================= */
+.campo-arquivo {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    border: 2px dashed var(--cor-borda);
+    border-radius: var(--raio-pequeno);
+    background: var(--cor-superficie-sutil);
+    cursor: pointer;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.campo-arquivo:hover {
+    border-color: var(--cor-primaria);
+    background: var(--cor-primaria-suave);
+}
+
+.campo-arquivo--desabilitado {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.campo-arquivo input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.campo-arquivo-icone {
+    font-size: 1.6rem;
+    line-height: 1;
+}
+
+.campo-arquivo-texto {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.campo-arquivo-texto strong {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.campo-arquivo-texto small {
+    color: var(--cor-texto-suave);
+    font-size: 0.82rem;
+}
+
+/* =========================================================================================
+   Botões
+   ========================================================================================= */
+.acoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.botao {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 0.65rem 1.3rem;
+    border-radius: var(--raio-pequeno);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.botao:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.botao:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.botao--primario {
+    background: var(--cor-primaria);
+    color: #fff;
+    box-shadow: var(--sombra-forte);
+}
+
+.botao--primario:hover:not(:disabled) {
+    background: var(--cor-primaria-escura);
+}
+
+.botao--secundario {
+    background: transparent;
+    color: var(--cor-primaria);
+    border-color: var(--cor-borda);
+}
+
+.botao--secundario:hover:not(:disabled) {
+    background: var(--cor-primaria-suave);
+    border-color: var(--cor-primaria);
+}
+
+.spinner {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: girar 0.7s linear infinite;
+}
+
+@keyframes girar {
+    to { transform: rotate(360deg); }
+}
+
+/* =========================================================================================
+   Barra de progresso
+   ========================================================================================= */
+.progresso {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.progresso-cabecalho {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.88rem;
+    color: var(--cor-texto-suave);
+    gap: 1rem;
+}
+
+.progresso-percentual {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--cor-texto);
+    font-size: 1rem;
+}
+
+.progresso-trilha {
+    height: 0.7rem;
+    border-radius: 999px;
+    background: var(--cor-superficie-sutil);
+    border: 1px solid var(--cor-borda);
+    overflow: hidden;
+}
+
+.progresso-preenchimento {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--cor-primaria), #60a5fa);
+    background-size: 200% 100%;
+    transition: width 0.25s ease;
+    animation: fluxo 1.5s linear infinite;
+}
+
+.progresso-preenchimento--completo {
+    background: linear-gradient(90deg, var(--cor-sucesso), #4ade80);
+    animation: none;
+}
+
+@keyframes fluxo {
+    to { background-position: -200% 0; }
+}
+
+/* =========================================================================================
+   Id do arquivo, log e download
+   ========================================================================================= */
+.id-arquivo {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--cor-texto-suave);
+}
+
+code {
+    font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+    font-size: 0.85em;
+    padding: 0.15em 0.45em;
+    border-radius: 6px;
+    background: var(--cor-primaria-suave);
+    color: var(--cor-primaria);
+    word-break: break-all;
+}
+
+.log {
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--raio-pequeno);
+    background: var(--cor-superficie-sutil);
+    padding: 0.5rem 0.9rem;
+}
+
+.log summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0.25rem 0;
+    color: var(--cor-texto-suave);
+}
+
+.log ul {
+    margin: 0.5rem 0 0.25rem;
+    padding-left: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.88rem;
+    color: var(--cor-texto-suave);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.linha-download {
+    display: flex;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.entrada {
+    flex: 1 1 240px;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 0.65rem 0.9rem;
+    border-radius: var(--raio-pequeno);
+    border: 1px solid var(--cor-borda);
+    background: var(--cor-superficie-sutil);
+    color: var(--cor-texto);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.entrada:focus {
+    outline: none;
+    border-color: var(--cor-primaria);
+    box-shadow: 0 0 0 3px var(--cor-primaria-suave);
+}
+
+.entrada::placeholder {
+    color: var(--cor-texto-suave);
+}
+
+.mensagem-erro {
+    margin: 0;
+    padding: 0.7rem 0.9rem;
+    border-radius: var(--raio-pequeno);
+    background: var(--cor-erro-suave);
+    color: var(--cor-erro);
+    font-size: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--cor-erro) 30%, transparent);
+}
+
+/* =========================================================================================
+   Boilerplate Blazor (tela de carregamento e erros)
+   ========================================================================================= */
 #blazor-error-ui {
     color-scheme: light only;
     background: lightyellow;
@@ -38,7 +465,7 @@
 }
 
     .blazor-error-boundary::after {
-        content: "An error has occurred."
+        content: "Ocorreu um erro."
     }
 
 .loading-progress {
@@ -52,14 +479,14 @@
 
     .loading-progress circle {
         fill: none;
-        stroke: #e0e0e0;
+        stroke: var(--cor-borda);
         stroke-width: 0.6rem;
         transform-origin: 50% 50%;
         transform: rotate(-90deg);
     }
 
         .loading-progress circle:last-child {
-            stroke: #1b6ec2;
+            stroke: var(--cor-primaria);
             stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
             transition: stroke-dasharray 0.05s ease-in-out;
         }
@@ -69,21 +496,9 @@
     text-align: center;
     font-weight: bold;
     inset: calc(20vh + 3.25rem) 0 auto 0.2rem;
+    color: var(--cor-texto);
 }
 
     .loading-progress-text:after {
-        content: var(--blazor-load-percentage-text, "Loading");
+        content: var(--blazor-load-percentage-text, "Carregando");
     }
-
-code {
-    color: #c02d76;
-}
-
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
-    color: var(--bs-secondary-color);
-    text-align: end;
-}
-
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-    text-align: start;
-}
