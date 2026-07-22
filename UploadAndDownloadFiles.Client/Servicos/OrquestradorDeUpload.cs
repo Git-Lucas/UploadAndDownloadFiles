@@ -47,6 +47,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         long? tamanhoParte,
         Action<string>? aoProgredir = null,
         Action<double>? aoAtualizarProgresso = null,
+        Action<bool>? aoSaudeRede = null,
         CancellationToken cancellationToken = default)
     {
         var tamanhoTotal = await _interop.ObterTamanhoArquivoAsync(idInputArquivo);
@@ -57,7 +58,16 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         if (modo == ModoUpload.PutUnico)
         {
             aoProgredir?.Invoke("Enviando arquivo...");
-            await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!, cabecalhoContentDisposition!, referenciaRelator);
+            try
+            {
+                await _interop.EnviarArquivoCompletoAsync(idInputArquivo, urlUpload!, cabecalhoContentDisposition!, referenciaRelator);
+                aoSaudeRede?.Invoke(true);
+            }
+            catch
+            {
+                aoSaudeRede?.Invoke(false);
+                throw;
+            }
 
             relator.Reportar(0, tamanhoTotal);
             aoProgredir?.Invoke("Confirmando upload...");
@@ -68,7 +78,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
             return;
         }
 
-        await EnviarMultipartAsync(id, idInputArquivo, tamanhoParte!.Value, tamanhoTotal, relator, referenciaRelator, aoProgredir, cancellationToken);
+        await EnviarMultipartAsync(id, idInputArquivo, tamanhoParte!.Value, tamanhoTotal, relator, referenciaRelator, aoProgredir, aoSaudeRede, cancellationToken);
     }
 
     private async Task EnviarMultipartAsync(
@@ -79,6 +89,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         RelatorDeProgresso relator,
         DotNetObjectReference<RelatorDeProgresso> referenciaRelator,
         Action<string>? aoProgredir,
+        Action<bool>? aoSaudeRede,
         CancellationToken cancellationToken)
     {
         _tamanhoParte = tamanhoParte;
@@ -105,7 +116,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
             await semaforo.WaitAsync(cancellationToken);
             try
             {
-                var etag = await EnviarParteComRetentativaAsync(id, idInputArquivo, numeroParte, referenciaRelator, cancellationToken);
+                var etag = await EnviarParteComRetentativaAsync(id, idInputArquivo, numeroParte, referenciaRelator, aoSaudeRede, cancellationToken);
                 _etagsConhecidos[numeroParte] = etag;
                 relator.Semear(numeroParte, TamanhoDaParte(numeroParte, tamanhoParte, tamanhoTotal));
                 aoProgredir?.Invoke($"Parte {numeroParte} enviada.");
@@ -129,7 +140,7 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
         aoProgredir?.Invoke("Upload concluído.");
     }
 
-    private async Task<string> EnviarParteComRetentativaAsync(Guid id, string idInputArquivo, int numeroParte, DotNetObjectReference<RelatorDeProgresso> referenciaRelator, CancellationToken cancellationToken)
+    private async Task<string> EnviarParteComRetentativaAsync(Guid id, string idInputArquivo, int numeroParte, DotNetObjectReference<RelatorDeProgresso> referenciaRelator, Action<bool>? aoSaudeRede, CancellationToken cancellationToken)
     {
         Exception? ultimaFalha = null;
 
@@ -140,10 +151,13 @@ public sealed class OrquestradorDeUpload(HttpClient http, InteropDeUpload intero
                 // Sempre busca a URL sob demanda: cobre tanto o primeiro envio quanto a
                 // reassinatura de uma URL expirada numa tentativa anterior.
                 var urlParte = await _http.GetFromJsonAsync<UrlParteResponse>($"/api/arquivos/multipart/{id}/partes/{numeroParte}/url", cancellationToken);
-                return await _interop.EnviarParteAsync(idInputArquivo, numeroParte, _tamanhoParte, urlParte!.Url, referenciaRelator);
+                var etag = await _interop.EnviarParteAsync(idInputArquivo, numeroParte, _tamanhoParte, urlParte!.Url, referenciaRelator);
+                aoSaudeRede?.Invoke(true);
+                return etag;
             }
             catch (Exception ex) when (tentativa < TentativasMaximasPorParte)
             {
+                aoSaudeRede?.Invoke(false);
                 ultimaFalha = ex;
                 var espera = s_backoffBase * Math.Pow(2, tentativa - 1);
                 await Task.Delay(espera, cancellationToken);

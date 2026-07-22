@@ -3,6 +3,7 @@
 @inject OrquestradorDeUpload Orquestrador
 @inject InteropDeUpload Interop
 @inject HttpClient Http
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 @using UploadAndDownloadFiles.Client.Servicos
 @using UploadAndDownloadFiles.Shared
 
@@ -18,10 +19,9 @@
             </div>
         </div>
 
-        <span class="status-conexao @(_online ? "status-conexao--online" : "status-conexao--offline")"
-              role="status" aria-live="polite">
+        <span class="status-conexao @ClasseEstado" role="status" aria-live="polite">
             <span class="status-ponto" aria-hidden="true"></span>
-            @(_online ? "Online" : "Offline")
+            @RotuloEstado
         </span>
     </header>
 
@@ -135,28 +135,92 @@
     private string? _idParaDownload;
     private string? _erroDownload;
 
-    private bool _online = true;
+    private enum EstadoConexao { Online, Instavel, Offline }
+
+    // (A) alcançabilidade real reportada pelo heartbeat / navigator.onLine.
+    private bool _alcancavel = true;
+    // (B) saúde dos envios reais: fica false quando uma requisição de upload falha por rede e volta
+    // a true quando um envio conclui com sucesso.
+    private bool _uploadSaudavel = true;
     private DotNetObjectReference<Home>? _referenciaConexao;
+
+    private EstadoConexao Estado
+    {
+        get
+        {
+            if (!_alcancavel)
+                return EstadoConexao.Offline;
+            if (!_uploadSaudavel)
+                return EstadoConexao.Instavel;
+            return EstadoConexao.Online;
+        }
+    }
+
+    private string ClasseEstado => Estado switch
+    {
+        EstadoConexao.Online => "status-conexao--online",
+        EstadoConexao.Instavel => "status-conexao--instavel",
+        _ => "status-conexao--offline",
+    };
+
+    private string RotuloEstado => Estado switch
+    {
+        EstadoConexao.Online => "Online",
+        EstadoConexao.Instavel => "Instável",
+        _ => "Offline",
+    };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
             return;
 
+        // Recurso EXTERNO (configurável) sondado pelo heartbeat para aferir a internet real — o
+        // servidor local continua acessível sem internet, então não serve como sonda.
+        var urlHeartbeat = Config["Conectividade:UrlHeartbeat"] ?? string.Empty;
+        var periodoHeartbeatMs = int.TryParse(Config["Conectividade:PeriodoHeartbeatMs"], out var periodo) ? periodo : 5000;
+
         _referenciaConexao = DotNetObjectReference.Create(this);
-        var online = await Interop.IniciarMonitorConexaoAsync(_referenciaConexao);
-        if (online != _online)
+        var online = await Interop.IniciarMonitorConexaoAsync(_referenciaConexao, urlHeartbeat, periodoHeartbeatMs);
+        if (online != _alcancavel)
         {
-            _online = online;
+            _alcancavel = online;
             StateHasChanged();
         }
     }
 
+    // (A) — resultado do heartbeat / eventos online-offline do browser.
     [JSInvokable]
-    public void AtualizarConexao(bool online)
+    public void AtualizarConexao(bool alcancavel)
     {
-        _online = online;
+        _alcancavel = alcancavel;
         StateHasChanged();
+    }
+
+    // (B) — saúde da rede inferida das requisições de upload reais.
+    private void AoSaudeRede(bool saudavel)
+    {
+        _uploadSaudavel = saudavel;
+        // Uma falha de envio dispara uma sondagem imediata para confirmar se é queda real de internet.
+        if (!saudavel)
+            _ = SondarConectividadeAsync();
+        StateHasChanged();
+    }
+
+    private async Task SondarConectividadeAsync()
+    {
+        try
+        {
+            await Interop.SondarAgoraAsync();
+        }
+        catch (JSException)
+        {
+            // Sondagem best-effort; falha aqui não deve derrubar o fluxo de upload.
+        }
+        catch (JSDisconnectedException)
+        {
+            // Runtime JS encerrado (ex.: navegação).
+        }
     }
 
     private async Task AoSelecionarArquivoAsync()
@@ -182,7 +246,7 @@
             _tamanhoParte = registro.TamanhoParte;
             Progredir($"Arquivo registrado (modo: {_modo}).");
 
-            await Orquestrador.EnviarAsync(registro.Id, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir, AtualizarProgresso);
+            await Orquestrador.EnviarAsync(registro.Id, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir, AtualizarProgresso, AoSaudeRede);
         }
         catch (Exception ex)
         {
@@ -203,7 +267,7 @@
         _mostrarProgresso = true;
         try
         {
-            await Orquestrador.EnviarAsync(_arquivoId.Value, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir, AtualizarProgresso);
+            await Orquestrador.EnviarAsync(_arquivoId.Value, IdInputArquivo, _modo, _urlUpload, _cabecalhoContentDisposition, _tamanhoParte, Progredir, AtualizarProgresso, AoSaudeRede);
         }
         catch (Exception ex)
         {

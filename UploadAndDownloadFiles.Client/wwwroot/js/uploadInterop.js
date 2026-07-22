@@ -113,27 +113,100 @@ export function iniciarDownload(url) {
 }
 
 // --- Monitor de conexão ---------------------------------------------------------------------
-// Reflete o estado de rede do browser (navigator.onLine) e notifica o .NET a cada mudança, para
-// que a UI mostre um indicador de online/offline. Útil para simular queda de internet (ex.: modo
-// "Offline" do DevTools) e observar a retentativa de envio.
+// Decide se a internet está de fato alcançável e notifica o .NET a cada mudança de estado.
+// `navigator.onLine` sozinho é enganoso: ele só vira `false` quando o SO não tem NENHUMA interface
+// de rede ativa — com um adaptador virtual sempre "up" (ex.: vEthernet do WSL, Hyper-V, VPN),
+// permanece `true` mesmo com o WiFi desligado. Por isso combinamos:
+//   (A) uma sondagem ativa periódica a um recurso EXTERNO (heartbeat), que reflete a internet real;
+//   (B) navigator.onLine como sinal rápido e definitivo de "sem rede" (ex.: modo Offline do DevTools).
+// A URL do heartbeat é acessada em modo `no-cors`: não lemos o corpo/status, só nos importa se o
+// fetch resolve (rede alcançável) ou rejeita (sem internet).
 
 let monitorConexao = null;
+let intervaloHeartbeat = null;
+let urlHeartbeat = null;
+let periodoHeartbeatMs = 5000;
+let sondagemEmAndamento = false;
+let ultimoReportado = null;
 
-function notificarConexao() {
+function reportarEstado(alcancavel) {
+    if (alcancavel === ultimoReportado) {
+        return;
+    }
+    ultimoReportado = alcancavel;
     if (monitorConexao) {
-        monitorConexao.invokeMethodAsync("AtualizarConexao", navigator.onLine);
+        monitorConexao.invokeMethodAsync("AtualizarConexao", alcancavel);
     }
 }
 
-export function iniciarMonitorConexao(referenciaDotNet) {
+async function sondar() {
+    // navigator.onLine === false é definitivo: sem interface de rede, não há o que sondar.
+    if (!navigator.onLine) {
+        reportarEstado(false);
+        return;
+    }
+    if (!urlHeartbeat || sondagemEmAndamento) {
+        return;
+    }
+
+    sondagemEmAndamento = true;
+    const controlador = new AbortController();
+    const cancelamento = setTimeout(() => controlador.abort(), periodoHeartbeatMs);
+    try {
+        const separador = urlHeartbeat.includes("?") ? "&" : "?";
+        await fetch(`${urlHeartbeat}${separador}_=${Date.now()}`, {
+            method: "GET",
+            mode: "no-cors",
+            cache: "no-store",
+            signal: controlador.signal,
+        });
+        reportarEstado(true);
+    } catch {
+        reportarEstado(false);
+    } finally {
+        clearTimeout(cancelamento);
+        sondagemEmAndamento = false;
+    }
+}
+
+function aoMudarRedeNavegador() {
+    // Reage na hora aos eventos do SO; ao voltar "online", confirma com uma sondagem real, já que
+    // ter interface de rede não garante acesso à internet.
+    if (!navigator.onLine) {
+        reportarEstado(false);
+    } else {
+        sondar();
+    }
+}
+
+export function iniciarMonitorConexao(referenciaDotNet, url, periodoMs) {
     monitorConexao = referenciaDotNet;
-    window.addEventListener("online", notificarConexao);
-    window.addEventListener("offline", notificarConexao);
+    urlHeartbeat = url;
+    periodoHeartbeatMs = periodoMs > 0 ? periodoMs : 5000;
+
+    window.addEventListener("online", aoMudarRedeNavegador);
+    window.addEventListener("offline", aoMudarRedeNavegador);
+
+    sondar();
+    intervaloHeartbeat = setInterval(sondar, periodoHeartbeatMs);
+
     return navigator.onLine;
 }
 
+// Dispara uma sondagem imediata (usada quando um envio falha) para confirmar rapidamente se é uma
+// queda real de internet, sem esperar o próximo tick do heartbeat.
+export function sondarAgora() {
+    ultimoReportado = null;
+    return sondar();
+}
+
 export function pararMonitorConexao() {
-    window.removeEventListener("online", notificarConexao);
-    window.removeEventListener("offline", notificarConexao);
+    window.removeEventListener("online", aoMudarRedeNavegador);
+    window.removeEventListener("offline", aoMudarRedeNavegador);
+    if (intervaloHeartbeat) {
+        clearInterval(intervaloHeartbeat);
+        intervaloHeartbeat = null;
+    }
     monitorConexao = null;
+    ultimoReportado = null;
 }
