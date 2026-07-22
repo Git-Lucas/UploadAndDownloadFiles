@@ -4,6 +4,11 @@ using UploadAndDownloadFiles.Shared;
 
 namespace UploadAndDownloadFiles.Aplicacao.CasosDeUso.Multipart;
 
+/// <summary>
+/// Lista as partes que ainda faltam enviar num upload multipart. Idempotente: se o arquivo já
+/// está <see cref="StatusArquivo.Completo"/> (ex.: botão "Tentar novamente" após concluir),
+/// não há partes faltantes e retorna lista vazia, em vez de falhar.
+/// </summary>
 public sealed class ListarPartesFaltantes(IRepositorioArquivos repositorio, IArmazenamentoObjetos armazenamento)
 {
     private readonly IRepositorioArquivos _repositorio = repositorio;
@@ -13,6 +18,9 @@ public sealed class ListarPartesFaltantes(IRepositorioArquivos repositorio, IArm
     {
         var arquivo = await _repositorio.ObterPorIdAsync(id, cancellationToken)
             ?? throw new ArquivoNaoEncontradoException(id);
+
+        if (arquivo.Status == StatusArquivo.Completo)
+            return [];
 
         if (arquivo.Modo != ModoUpload.Multipart || arquivo.Status != StatusArquivo.Enviando)
             throw new OperacaoInvalidaException($"Arquivo '{id}' não está em upload multipart.");
