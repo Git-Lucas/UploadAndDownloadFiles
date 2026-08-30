@@ -1,7 +1,8 @@
-# CloudFront e CORS do S3 (pré-requisitos operacionais)
+# CloudFront e CORS do S3
 
-Como em `infraestrutura-lifecycle-rule-s3.md`, esta change não provisiona infraestrutura AWS via
-código/IaC. Os itens abaixo devem ser configurados manualmente (console, AWS CLI ou Terraform).
+A infraestrutura descrita abaixo é provisionada via Terraform (`infra/`, ver `README.md` —
+"Provisionamento na AWS"). Este documento registra o porquê de cada decisão, que o código de
+infraestrutura não expressa por si só.
 
 ## CloudFront (download, C10)
 

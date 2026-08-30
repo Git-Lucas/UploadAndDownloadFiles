@@ -376,3 +376,11 @@ openspec/
 *.pem
 *.key
 *.pub
+
+# Terraform (infra/)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+infra/aplicacao.env
