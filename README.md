@@ -8,14 +8,123 @@ grandes usando Amazon S3 como armazenamento e Amazon CloudFront (Signed URLs) pa
 - `UploadAndDownloadFiles.Shared/` — DTOs e enums compartilhados entre Client e Server
 - `UploadAndDownloadFiles.Testes.Unidade` / `UploadAndDownloadFiles.Testes.Integracao` — testes xUnit
 
-Mais contexto de arquitetura e requisitos em `docs/PRD - Upload e Download de Arquivos com S3.md`.
+Mais contexto de arquitetura e requisitos em `docs/prd-upload-and-download-files-S3.md`.
+
+## Regras de negócio e arquitetura
+
+### Por que os bytes não passam pelo backend
+
+Arquivos vão de poucos MB a TB. Fazer o browser enviar para o backend e o backend reenviar para o
+S3 dobraria tráfego, memória e tempo, e tornaria o backend o gargalo/ponto de falha de uploads
+grandes. Por isso o Server nunca vê os bytes: ele só gera URLs pré-assinadas do S3, e o browser
+troca dados diretamente com a AWS. O papel do backend é orquestrar (registrar, decidir o modo,
+assinar URLs, verificar conclusão) e manter o status confiável no banco — não transportar dados.
+
+### Limiar entre PUT único e multipart
+
+- **< 100 MB** → **PUT único**: uma única URL pré-assinada de `PUT`.
+- **≥ 100 MB** → **Multipart upload**: o S3 recebe o arquivo em partes independentes, cada uma
+  com sua própria URL pré-assinada.
+
+100 MB é também o **tamanho mínimo de parte** (`Arquivo.TamanhoMinimoParteEmBytes`), o que não é
+coincidência: no multipart, o tamanho de cada parte é adaptativo —
+`max(100 MB, arredondaCima(tamanhoDeclarado / 9500))` — para nunca ultrapassar o limite de
+**10.000 partes** do S3 mesmo em arquivos de até 5 TB (o teto do S3). Usar exatamente o piso do
+particionamento como limiar evita duas regras de tamanho independentes para manter sincronizadas.
+
+Por que não usar multipart para tudo (já que o S3 aceita)? Multipart tem mais overhead de
+orquestração — iniciar o upload, assinar N URLs, rastrear N ETags, finalizar com a lista de
+partes — que só compensa quando o ganho (paralelismo e retomada) importa. Para arquivos pequenos
+esse overhead é puro custo sem benefício perceptível, então PUT único é mais simples e mais rápido
+de principio a fim.
+
+### Fluxo de upload — do clique ao objeto no S3
+
+1. **Registro (Client → Server).** O browser lê nome e tamanho do arquivo (via JS interop, sem
+   ler o conteúdo) e chama `POST /api/arquivos`. O Server gera a *key* do objeto no formato
+   `{id}/{nome-sanitizado}` — **nunca aceita a key vinda do cliente**, o que impede um cliente de
+   sobrescrever ou apontar para o objeto de outro registro. O nome é sanitizado para ASCII porque
+   a assinatura das CloudFront Signed URLs precisa bater byte a byte com a URL requisitada, e o
+   browser percent-encoda acentos/espaços; o nome de exibição original fica preservado à parte
+   (`NomeOriginal`) e devolvido depois no download via `Content-Disposition`.
+2. **Decisão de modo (Server).** Com base no tamanho declarado, o Server decide `PutUnico` ou
+   `Multipart` e já devolve ao Client tudo que ele precisa para o modo escolhido: uma URL de PUT
+   assinada (PUT único) ou o tamanho de parte calculado (multipart, URLs de parte vêm depois, sob
+   demanda). Nos dois casos o registro nasce com status `Pendente`.
+3. **Envio (Client → S3, direto).**
+   - *PUT único*: o browser faz um único `PUT` para a URL assinada, incluindo o
+     `Content-Disposition` que fez parte da assinatura.
+   - *Multipart*: o Client abre um `uploadId` no S3 (via Server), e para cada parte pede sob
+     demanda `GET /multipart/{id}/partes/{n}/url` e faz o `PUT` da parte direto ao S3, até 4 partes
+     em paralelo (`ConcorrenciaMaxima`). Pedir a URL de cada parte só na hora do envio (em vez de
+     todas de uma vez no registro) é o que permite reassinar sem custo extra uma parte cuja URL
+     expirou numa tentativa anterior.
+4. **Confirmação (Client → Server → S3).**
+   - *PUT único*: o Client chama `POST /put-unico/{id}/confirmar`; o Server faz `HeadObject` no S3
+     para confirmar que o objeto existe antes de marcar `Completo` — a confirmação do cliente é só
+     um gatilho, quem valida é o próprio storage.
+   - *Multipart*: o Client soma os ETags recebidos de cada `PUT` de parte e chama
+     `POST /multipart/{id}/finalizar`; o Server executa `CompleteMultipartUpload` no S3 (que
+     valida os ETags) e grava o tamanho real do objeto. Essa finalização é **idempotente**:
+     chamar duas vezes não falha, sempre retorna `Completo`.
+5. **Retomada.** Se a conexão cai no meio de um multipart, `GET /multipart/{id}/partes/faltantes`
+   diz exatamente quais partes o S3 ainda não tem (consulta feita pelo Client ao reiniciar o
+   envio), e só essas são reenviadas — nunca as partes já aceitas. Essa consulta também é
+   idempotente: um arquivo já `Completo` responde lista vazia em vez de erro, o que permite
+   reexecutar o fluxo de envio sem tratamento especial para "já terminou".
+
+### Máquina de estados
+
+- **PUT único:** `Pendente → Completo`.
+- **Multipart:** `Pendente → Enviando → Completo` (ou `Incompleto`, se abandonado).
+
+`Enviando` só existe no multipart porque é o único modo com uma janela de tempo real entre o
+início (abrir o `uploadId`) e o fim (`CompleteMultipartUpload`) em que o servidor sabe que um envio
+está em progresso; no PUT único essa janela não é observável pelo backend.
+
+### Reconciliação e limpeza (o que acontece quando o cliente some)
+
+Um cliente pode fechar a aba, perder a rede ou nunca voltar. Sem uma rotina de auditoria, o
+registro ficaria `Pendente`/`Enviando` para sempre, mesmo que o upload tenha (ou não) sido
+concluído no S3. Por isso:
+
+- Um `BackgroundService` roda **1x/dia** e resolve todo registro pendente há mais de 24h: PUT
+  único vira `Completo` se o objeto existe no S3, ou fica pendente aguardando envio; multipart
+  lista as partes no S3 — se todas presentes, finaliza como `Completo`; se faltam partes, marca
+  `Incompleto` e **aborta** o multipart upload no S3 (o que libera as partes já enviadas).
+- Mesmo sem essa rotina rodar a tempo, uma **lifecycle rule do bucket S3** aborta automaticamente
+  qualquer multipart incompleto após 7 dias, removendo as partes órfãs e o custo de armazená-las —
+  uma segunda camada de limpeza que não depende do backend estar no ar.
+
+### Fluxo de download
+
+O Client pede `GET /api/arquivos/{id}/download`; o Server assina uma **CloudFront Signed URL**
+(expiração curta) e devolve. O browser baixa direto da CDN, que serve do cache de edge quando
+possível — o bucket S3 nunca fica publicamente acessível (acesso só via **Origin Access Control**),
+e o nome de exibição do arquivo salvo vem do `Content-Disposition` gravado no objeto durante o
+upload, não da key (que é ASCII sanitizado). A cache policy do CloudFront ignora a query string na
+chave de cache — necessário porque cada Signed URL tem uma assinatura distinta na query string, e
+sem esse ajuste o mesmo arquivo nunca teria cache hit entre downloads diferentes.
+
+### Por que essas escolhas, resumido
+
+| Preocupação | Como é resolvida |
+|---|---|
+| Backend não pode ser gargalo/custo de bytes | Upload e download direto entre browser e AWS; backend só assina URLs |
+| Cliente não pode escolher onde o objeto é gravado | Key gerada pelo servidor, nunca aceita do cliente |
+| Queda de rede não pode custar horas de reenvio | Multipart com partes independentes + endpoint de partes faltantes |
+| Credenciais AWS de vida curta (IAM Role) | URLs pré-assinadas de expiração curta, reassinadas sob demanda por parte |
+| Cliente pode abandonar o processo | Reconciliação diária + lifecycle rule do S3 como segunda camada |
+| Conteúdo privado, mas baixado globalmente | CloudFront com Signed URL + OAC, cache policy que ignora query string |
+| Nome de exibição com acentos/espaços | Key ASCII sanitizada; nome original preservado via `Content-Disposition` |
 
 ## Pré-requisitos
 
+- [Terraform](https://developer.hashicorp.com/terraform/install)
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) com integração WSL habilitada
+  (usado pelo Terraform para subir o container do banco)
 - [.NET SDK 10](https://dotnet.microsoft.com/download)
-- Uma instância de SQL Server acessível (local, container ou gerenciada — ex. Azure SQL/Amazon RDS)
-- Uma conta AWS com permissão para criar bucket S3, distribuição CloudFront, chave pública/key
-  group e a role/usuário IAM usados pela aplicação
 
 ## Configuração (`appsettings.json`)
 
@@ -70,165 +179,71 @@ CloudFront__CaminhoChavePrivada=...
 
 ## Provisionamento na AWS
 
-A aplicação **não provisiona infraestrutura AWS via código**. Os passos abaixo devem ser feitos uma
-vez, via Console AWS, CLI ou Terraform, antes de rodar a aplicação contra uma conta real.
+A infraestrutura é provisionada via [Terraform](https://developer.hashicorp.com/terraform), em
+`infra/`. Nenhuma etapa passa pelo console da AWS.
 
-### 1. Criar o bucket S3
+### Pré-condição (feita uma única vez)
 
-1. Console AWS → **S3** → **Create bucket** (bucket padrão/general-purpose — **não** um directory
-   bucket do S3 Express One Zone, que não suporta lifecycle rules nem origem via OAC do CloudFront,
-   usados nos passos 3 e 4).
-2. Nome único (esse é o valor de `ArmazenamentoS3:NomeBucket`), região à sua escolha.
-3. **Block all public access**: mantenha habilitado (padrão) — o bucket é privado; o acesso de
-   leitura só acontece via CloudFront (OAC) e o de escrita via presigned URLs assinadas pelo backend.
+Crie manualmente, fora do Terraform, uma identidade IAM administrativa (`terraform-admin`) com
+permissão para criar bucket S3, distribuição CloudFront, chave pública/key group e usuário IAM, e
+configure-a como profile padrão do AWS CLI. Ela fica fora do Terraform de propósito: se entrasse no
+state, o `destroy` revogaria, no meio da própria execução, a credencial que está usando — deixando a
+distribuição órfã, desabilitada e não deletável.
 
-### 2. Configurar CORS do bucket (upload multipart)
-
-O client Blazor WASM lê o header `ETag` da resposta do `PUT` de cada parte (necessário para depois
-chamar `CompleteMultipartUpload`). Por padrão, navegadores não expõem `ETag` em respostas
-cross-origin, então o CORS do bucket precisa expô-lo explicitamente.
-
-Bucket → **Permissions** → **Cross-origin resource sharing (CORS)**:
-
-```json
-[
-  {
-    "AllowedOrigins": ["https://<dominio-do-app>"],
-    "AllowedMethods": ["PUT"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"]
-  }
-]
-```
-
-Em desenvolvimento local, `AllowedOrigins` deve ser o valor de `applicationUrl` configurado no
-`launchSettings.json` do projeto Server (startup project).
-
-Detalhes em `docs/infraestrutura-cloudfront-e-cors.md`.
-
-### 3. Configurar a lifecycle rule (limpeza de multipart incompleto)
-
-Bucket → **Management** → **Lifecycle rules** → **Create lifecycle rule**:
-
-- **Abort Incomplete Multipart Uploads**: **7 dias**.
-
-Ou via AWS CLI:
+### Provisionar
 
 ```bash
-aws s3api put-bucket-lifecycle-configuration \
-  --bucket <nome-do-bucket> \
-  --lifecycle-configuration file://lifecycle-rule.json
+cd infra
+terraform init
+terraform apply
 ```
 
-com `lifecycle-rule.json`:
-
-```json
-{
-  "Rules": [
-    {
-      "ID": "abortar-multipart-incompleto-7-dias",
-      "Status": "Enabled",
-      "Filter": {},
-      "AbortIncompleteMultipartUpload": {
-        "DaysAfterInitiation": 7
-      }
-    }
-  ]
-}
-```
-
-Detalhes em `docs/infraestrutura-lifecycle-rule-s3.md`.
-
-### 4. Criar a distribuição CloudFront com Origin Access Control (OAC)
-
-1. Console AWS → **CloudFront** → **Create distribution**.
-2. **Origin domain**: selecione o bucket S3 criado no passo 1.
-3. **Origin access**: **Origin access control settings (recommended)** → **Create new OAC** (aceite
-   os padrões) → **Sign requests**.
-4. Após criar a distribuição, o CloudFront mostra um aviso pedindo para atualizar a **bucket
-   policy** do S3 — copie a policy sugerida (ela restringe o acesso ao principal
-   `cloudfront.amazonaws.com` com uma condição pela ARN da distribuição) e aplique em
-   **S3 → bucket → Permissions → Bucket policy**. Isso garante que o bucket continue privado e só
-   seja acessível através dessa distribuição.
-5. **Cache policy** do behavior: use a policy gerenciada **CachingOptimized** (ou uma custom com
-   **Query strings: None**) — a assinatura da Signed URL (`Expires`/`Signature`/`Key-Pair-Id`) fica
-   na query string e não deve fazer parte da chave de cache; assim, requests para o mesmo arquivo
-   com assinaturas diferentes (de usuários diferentes) compartilham o mesmo cache no edge.
-6. Anote o **domínio da distribuição** (ex. `d111111abcdef8.cloudfront.net`) — é o valor de
-   `CloudFront:DominioDistribuicao`.
-
-Detalhes em `docs/infraestrutura-cloudfront-e-cors.md`.
-
-### 5. Gerar o par de chaves e habilitar Signed URLs (trusted key group)
-
-O backend (`AssinadorCdnCloudFront`) assina URLs com política canônica (RSA-SHA1). É preciso gerar
-um par de chaves RSA e cadastrar a chave pública no CloudFront:
+Ao final, o comando gera `infra/aplicacao.env` com todos os valores que a aplicação precisa —
+credenciais e região da AWS, nome do bucket, domínio da distribuição, id do par de chaves, caminho
+da chave privada e connection string do banco. Carregue-o antes de rodar a aplicação:
 
 ```bash
-openssl genrsa -out private_key.pem 2048
-openssl rsa -pubout -in private_key.pem -out public_key.pem
+set -a && source aplicacao.env && set +a
+cd ../UploadAndDownloadFiles
+dotnet run
 ```
 
-1. Console AWS → **CloudFront** → **Key management** → **Public keys** → **Create public key**,
-   colando o conteúdo de `public_key.pem`. Anote o **Key ID** gerado — é o valor de
-   `CloudFront:IdParDeChaves`.
-2. **Key management** → **Key groups** → **Create key group**, adicionando a chave pública criada.
-3. Na distribuição, no behavior relevante → **Edit** → **Restrict viewer access**: **Yes**, usando
-   **Trusted key groups (recommended)** → selecione o key group criado.
-4. Guarde `private_key.pem` em local seguro e acessível pela aplicação (fora do controle de
-   versão) — é o arquivo apontado por `CloudFront:CaminhoChavePrivada`. Em produção, prefira
-   injetá-lo via secret manager/volume montado, nunca commitado no repositório.
+O `apply` leva de **5 a 8 minutos** e é dominado pela propagação da distribuição CloudFront; o banco
+sobe em paralelo, então não soma ao tempo total. Deixar de destruir mantém custo (distribuição
+ativa) e uma credencial válida na conta.
 
-### 6. Configurar acesso da aplicação ao S3 (IAM)
+### Destruir
 
-A aplicação usa a cadeia padrão de credenciais da AWS (`new AmazonS3Client()` sem credenciais
-explícitas, em `Program.cs`) — em produção, o ideal é uma **IAM Role** anexada ao recurso de
-computação (instance profile de EC2, task role de ECS, role de execução do App Runner/Lambda etc.).
-Para desenvolvimento local, configure um usuário/perfil via `aws configure` ou variáveis de
-ambiente (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`).
-
-Política IAM mínima (substitua `<nome-do-bucket>`), cobrindo upload único, multipart, listagem de
-partes, abort e leitura de metadados (`HeadObject`) usados pela aplicação e pela reconciliação:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "AcessoAosObjetosDoBucket",
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:ListMultipartUploadParts",
-        "s3:AbortMultipartUpload"
-      ],
-      "Resource": "arn:aws:s3:::<nome-do-bucket>/*"
-    },
-    {
-      "Sid": "ListagemDoBucket",
-      "Effect": "Allow",
-      "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::<nome-do-bucket>"
-    }
-  ]
-}
+```bash
+cd infra
+terraform destroy
 ```
 
-> **Importante:** o statement `s3:ListBucket` é obrigatório (recurso a nível de bucket, **sem** o
-> sufixo `/*`). Sem ele, o `HeadObject` sobre uma chave **inexistente** retorna `403 Forbidden` em
-> vez de `404 Not Found`, quebrando a reconciliação de arquivos que existem no banco mas não no
-> bucket (a aplicação depende do 404 para marcar o registro como inválido/incompleto).
+> **Não carregue `infra/aplicacao.env` no mesmo shell usado para rodar `terraform destroy`.** Como
+> variável de ambiente vence profile na cadeia de credenciais da AWS, isso trocaria o
+> `terraform-admin` pela identidade restrita da aplicação no meio da destruição — que não tem
+> permissão para remover bucket, distribuição, chave, key group ou usuário IAM.
 
-Crie a role/usuário em **IAM** → **Roles**/**Users** → **Create** → anexe uma policy customizada
-com o JSON acima → associe a role ao recurso de computação (ou, em dev, configure as credenciais do
-usuário localmente).
+Remove bucket (com os objetos dentro), distribuição, chave pública, key group, usuário IAM da
+aplicação e o container do banco. A identidade `terraform-admin` não é afetada. Leva de **10 a 20
+minutos**, dominado pela mesma propagação da CDN; um `Ctrl-C` nessa janela deixa recursos órfãos,
+mas o state local sobrevive à interrupção e reexecutar o comando retoma de onde parou.
 
-### 7. Banco de dados
+### O que é criado
 
-Provisione uma instância SQL Server (local, container ou gerenciada) e informe a connection string
-em `ConnectionStrings:ArquivosDb`. As migrações do EF Core (`Infraestrutura/Persistencia/Migracoes`)
-são aplicadas automaticamente no startup da aplicação.
+- **Bucket S3** privado, CORS liberando `PUT` das origens locais da aplicação e expondo `ETag`
+  (necessário para o client ler o `ETag` da resposta de cada parte do multipart — detalhes em
+  `docs/infraestrutura-cloudfront-e-cors.md`), e lifecycle rule abortando multipart incompleto após
+  7 dias (detalhes em `docs/infraestrutura-lifecycle-rule-s3.md`).
+- **Distribuição CloudFront** com Origin Access Control e a bucket policy derivada da ARN da
+  distribuição (sem transcrição manual), key group exigido para acesso e cache policy gerenciada
+  `Managed-CachingOptimized`, que não inclui a query string na chave de cache — condição para que
+  assinaturas distintas do mesmo arquivo compartilhem cache no edge.
+- **Identidade IAM restrita** com a policy mínima usada pela aplicação, incluindo `s3:ListBucket` a
+  nível de bucket — sem ele, consultar uma chave inexistente resulta em "acesso negado" em vez de
+  "não encontrado", quebrando a reconciliação.
+- **Container local do SQL Server**, com a senha do `sa` gerada e o provisionamento só reportando
+  sucesso quando o banco já aceita conexões (as migrações do EF Core rodam no startup sem retry).
 
 ## Rodando localmente
 
